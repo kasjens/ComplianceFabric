@@ -24,7 +24,8 @@
     {
       "href": "eu-ai-act",
       "include-controls": [
-        "eu-ai-act-12-record-keeping"
+        "eu-ai-act-12-record-keeping",
+        "eu-ai-act-15-accuracy-robustness"
       ]
     }
   ]

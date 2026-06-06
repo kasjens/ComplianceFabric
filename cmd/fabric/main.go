@@ -11,6 +11,7 @@ import (
 	"os"
 
 	"github.com/kasjens/ComplianceFabric/internal/assess"
+	"github.com/kasjens/ComplianceFabric/internal/eval"
 	"github.com/kasjens/ComplianceFabric/internal/evidence"
 	"github.com/kasjens/ComplianceFabric/internal/generate"
 	"github.com/kasjens/ComplianceFabric/internal/ledger"
@@ -35,6 +36,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric policy-report <report-json-file> <policies-dir> [--ledger <path>]\n" +
 	"       fabric drift <argo-apps-json-file> <control-id> [--ledger <path>]\n" +
 	"       fabric trace <traces-json-file> <registry-dir> <control-id> [--ledger <path>]\n" +
+	"       fabric eval-gate <eval-run-file> <gate-file> <control-id> [--ledger <path>]\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>\n" +
 	"       fabric registry validate <registry-dir>"
 
@@ -44,7 +46,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "ledger": true, "registry": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "ledger": true, "registry": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -60,7 +62,7 @@ func run(args []string, out io.Writer) int {
 		switch {
 		case cmd == "assess" && a == "--strict":
 			strict = true
-		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace") && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -120,6 +122,16 @@ func run(args []string, out io.Writer) int {
 			return 2
 		}
 		return runTrace(positional[0], positional[1], positional[2], ledgerPath, out)
+	}
+
+	// eval-gate runs an agent version's evaluation results through the promotion
+	// gate and records the verdict as evidence keyed to the given control.
+	if cmd == "eval-gate" {
+		if len(positional) != 3 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runEvalGate(positional[0], positional[1], positional[2], ledgerPath, out)
 	}
 
 	// registry validate checks an agent/prompt/tool registry directory for
@@ -353,6 +365,30 @@ func runLedgerPosture(path string, out io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runEvalGate(runFile, gateFile, controlID, ledgerPath string, out io.Writer) int {
+	runData, err := os.ReadFile(runFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	gateData, err := os.ReadFile(gateFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	var gate eval.Gate
+	if err := json.Unmarshal(gateData, &gate); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := evidence.FromEvalGate(runData, gate, controlID)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return emitRecords(records, ledgerPath, out)
 }
 
 func runTrace(tracesFile, registryDir, controlID, ledgerPath string, out io.Writer) int {

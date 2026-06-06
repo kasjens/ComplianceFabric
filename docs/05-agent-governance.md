@@ -29,6 +29,8 @@ Prompts, tool definitions, retrieval configuration, and runtime policy are code.
 
 Before an agent version reaches production it passes evaluation gates: checks for sensitive-data leakage, prompt-injection resistance, and output quality against a fixed test set. Guardrails run again at runtime on live traffic. A version that fails a gate does not promote.
 
+**Implementation status:** the `internal/eval` package models the gate as authoritative promotion policy — which evaluation suites must have been run and how many failing cases are tolerated — kept separate from the run it judges, so a run cannot grade itself. `fabric eval-gate <eval-run-file> <gate-file> <control-id>` is the fifth evidence producer: it runs an agent version's evaluation results through the gate and records the verdict, satisfied when the version would promote and not-satisfied when the gate blocks it (a required suite went untested, or failures exceeded the budget). Records key to the `eu-ai-act-15-accuracy-robustness` control (implemented by a non-Kyverno `eval-gate` component) and feed the same ledger, so promotion decisions roll up through `fabric ledger assess` and `fabric ledger posture` like every other evidence source.
+
 ## Interaction tracing
 
 Every agent action is traced with OpenTelemetry: the input, the model and version, the tools called, the retrieved sources, the output, and the policy decisions along the way. This produces a who, what, when, and why record for each action, which is the agent's audit trail. Traces flow into the evidence ledger like any other evidence.

@@ -657,6 +657,47 @@ func TestTraceRequiresThreePositionalArgs(t *testing.T) {
 	}
 }
 
+func TestEvalGatePromotedVersionExitsZeroAndAppendsToLedger(t *testing.T) {
+	dir := t.TempDir()
+	runFile := filepath.Join(dir, "run.json")
+	writeFixture(t, runFile, `{"agent":"a","version":"1.0.0","run-at":"2026-06-06T10:00:00Z",
+		"results":[{"case":"inj-1","suite":"prompt-injection","passed":true}]}`)
+	gateFile := filepath.Join(dir, "gate.json")
+	writeFixture(t, gateFile, `{"required-suites":["prompt-injection"],"max-failures":0}`)
+	ledgerPath := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	code := run([]string{"eval-gate", runFile, gateFile, "eu-ai-act-15-accuracy-robustness", "--ledger", ledgerPath}, &out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for promoted version, got %d:\n%s", code, out.String())
+	}
+	if vcode := run([]string{"ledger", "verify", ledgerPath}, &bytes.Buffer{}); vcode != 0 {
+		t.Errorf("expected ledger to verify, got exit %d", vcode)
+	}
+}
+
+func TestEvalGateBlockedVersionExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	runFile := filepath.Join(dir, "run.json")
+	writeFixture(t, runFile, `{"agent":"a","version":"1.1.0","run-at":"2026-06-06T10:00:00Z",
+		"results":[{"case":"inj-1","suite":"prompt-injection","passed":false}]}`)
+	gateFile := filepath.Join(dir, "gate.json")
+	writeFixture(t, gateFile, `{"required-suites":["prompt-injection"],"max-failures":0}`)
+
+	var out bytes.Buffer
+	code := run([]string{"eval-gate", runFile, gateFile, "eu-ai-act-15-accuracy-robustness"}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for blocked version, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestEvalGateRequiresThreePositionalArgs(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"eval-gate", "run.json", "gate.json"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
 func TestRegistryRequiresSubcommandAndPath(t *testing.T) {
 	var out bytes.Buffer
 	if code := run([]string{"registry", "validate"}, &out); code != 2 {

@@ -33,7 +33,7 @@ The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architec
 
 - Agent and prompt/tool registry as versioned artifacts. **Done:** the `internal/registry` package models agents, prompts, and tools as versioned artifacts, and `fabric registry validate` checks versioning, agent ownership, reference resolution, and duplicate ids. A starter registry lives under `registry/`.
 - Gateway policy and interaction tracing. **Done (tracing):** `fabric trace` is a fourth evidence producer that judges each gateway interaction against the registry's qualified surface (an undeclared prompt or tool, or an unregistered agent, is off-policy) and keys records to `eu-ai-act-12-record-keeping`, feeding the same ledger. The runtime gateway that enforces policy inline (rather than evaluating its log after the fact) remains.
-- Evaluation gates before promotion.
+- Evaluation gates before promotion. **Done:** the `internal/eval` package models the promotion gate as authoritative policy (required suites and a failure budget), and `fabric eval-gate` is a fifth evidence producer that records whether a version was cleared to ship, keyed to `eu-ai-act-15-accuracy-robustness`.
 
 ## Phase 5: Cross-sector profiles
 

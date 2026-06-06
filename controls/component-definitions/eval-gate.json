@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "title": "AI agent evaluation-gate governance components",
+    "version": "0.1.0"
+  },
+  "components": [
+    {
+      "title": "eval-gate",
+      "type": "process",
+      "description": "Pre-promotion evaluation gate that runs an agent version against a fixed test set (prompt-injection resistance, data-leakage checks, output quality) and blocks promotion of any version that fails, giving the agent the accuracy and robustness assurance a high-risk AI system requires.",
+      "props": [
+        { "name": "Rule_Id", "value": "agent-promotion-eval-gate", "remarks": "rule_set_00" },
+        { "name": "Rule_Description", "value": "An agent version promotes only after passing the fixed evaluation suite within the gate's failure budget.", "remarks": "rule_set_00" },
+        { "name": "Check_Id", "value": "agent-eval-gate", "remarks": "rule_set_00" },
+        { "name": "Check_Description", "value": "fabric eval-gate runs an agent version's evaluation results through the promotion gate and records whether the version was cleared to ship.", "remarks": "rule_set_00" }
+      ],
+      "control-implementations": [
+        {
+          "source": "controls/profiles/pharma-mes-baseline.json",
+          "description": "Pre-promotion evaluation gating for AI agents in the pharma MES baseline.",
+          "implemented-requirements": [
+            {
+              "control-id": "eu-ai-act-15-accuracy-robustness",
+              "description": "The evaluation gate holds each agent version to a fixed accuracy and robustness test set and blocks promotion of any version that does not meet it.",
+              "props": [
+                { "name": "Rule_Id", "value": "agent-promotion-eval-gate" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
