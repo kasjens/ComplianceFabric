@@ -29,6 +29,11 @@
       "id": "annex11-10-change-control",
       "title": "Change and configuration management",
       "statement": "Any changes to a computerised system including system configurations should only be made in a controlled manner in accordance with a defined procedure."
+    },
+    {
+      "id": "annex11-11-periodic-evaluation",
+      "title": "Periodic evaluation",
+      "statement": "Computerised systems should be periodically evaluated to confirm that they remain in a valid state and are compliant with GMP."
     }
   ]
 }

@@ -9,7 +9,8 @@
       "include-controls": [
         "annex11-9-audit-trail",
         "annex11-12-1-access-control",
-        "annex11-10-change-control"
+        "annex11-10-change-control",
+        "annex11-11-periodic-evaluation"
       ]
     },
     {

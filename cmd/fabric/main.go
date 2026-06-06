@@ -32,6 +32,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric generate <controls-dir> <policies-dir> <out-dir>\n" +
 	"       fabric evidence <pr-json-file> [control-id] [--ledger <path>]\n" +
 	"       fabric policy-report <report-json-file> <policies-dir> [--ledger <path>]\n" +
+	"       fabric drift <argo-apps-json-file> <control-id> [--ledger <path>]\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>"
 
 // run executes the CLI and returns the process exit code:
@@ -40,7 +41,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "ledger": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "ledger": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -56,7 +57,7 @@ func run(args []string, out io.Writer) int {
 		switch {
 		case cmd == "assess" && a == "--strict":
 			strict = true
-		case (cmd == "evidence" || cmd == "policy-report") && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -115,6 +116,16 @@ func run(args []string, out io.Writer) int {
 			return 2
 		}
 		return runPolicyReport(positional[0], positional[1], ledgerPath, out)
+	}
+
+	// drift turns Argo CD application sync status into drift evidence records
+	// keyed to the given control.
+	if cmd == "drift" {
+		if len(positional) != 2 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runDrift(positional[0], positional[1], ledgerPath, out)
 	}
 
 	wantArgs := 1
@@ -220,7 +231,26 @@ func runPolicyReport(reportFile, policiesDir, ledgerPath string, out io.Writer) 
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
+	return emitRecords(records, ledgerPath, out)
+}
 
+func runDrift(appsFile, controlID, ledgerPath string, out io.Writer) int {
+	data, err := os.ReadFile(appsFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := evidence.FromArgoApplications(data, controlID)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return emitRecords(records, ledgerPath, out)
+}
+
+// emitRecords optionally appends the records to a ledger, prints them as a JSON
+// array, and returns exit 1 if any record is not satisfied so CI can gate on it.
+func emitRecords(records []evidence.Record, ledgerPath string, out io.Writer) int {
 	if ledgerPath != "" {
 		l := ledger.Open(ledgerPath)
 		for _, rec := range records {

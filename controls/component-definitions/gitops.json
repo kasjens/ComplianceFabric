@@ -1,29 +1,40 @@
 {
   "metadata": {
-    "title": "GitOps change-control evidence components",
+    "title": "GitOps change-control and drift evidence components",
     "version": "0.1.0"
   },
   "components": [
     {
       "title": "gitops",
       "type": "process",
-      "description": "GitOps pull-request workflow whose merged, reviewed pull requests are the change-control evidence for the mapped controls.",
+      "description": "GitOps workflow whose merged, reviewed pull requests are the change-control evidence and whose continuous reconciliation is the drift evidence for the mapped controls.",
       "props": [
         { "name": "Rule_Id", "value": "pr-change-control", "remarks": "rule_set_00" },
         { "name": "Rule_Description", "value": "Every platform change is a reviewed, approved, merged pull request.", "remarks": "rule_set_00" },
         { "name": "Check_Id", "value": "gitops-pr-evidence", "remarks": "rule_set_00" },
-        { "name": "Check_Description", "value": "fabric evidence verifies a pull request is an attributable, time-stamped, approved and merged authorized change.", "remarks": "rule_set_00" }
+        { "name": "Check_Description", "value": "fabric evidence verifies a pull request is an attributable, time-stamped, approved and merged authorized change.", "remarks": "rule_set_00" },
+        { "name": "Rule_Id", "value": "gitops-drift-control", "remarks": "rule_set_01" },
+        { "name": "Rule_Description", "value": "Running cluster state continuously reconciles to the validated state held in Git.", "remarks": "rule_set_01" },
+        { "name": "Check_Id", "value": "gitops-drift-evidence", "remarks": "rule_set_01" },
+        { "name": "Check_Description", "value": "fabric drift confirms each Argo CD application is Synced, evidencing the system remains in its qualified state.", "remarks": "rule_set_01" }
       ],
       "control-implementations": [
         {
           "source": "controls/profiles/pharma-mes-baseline.json",
-          "description": "GitOps change control for the pharma MES baseline.",
+          "description": "GitOps change control and drift detection for the pharma MES baseline.",
           "implemented-requirements": [
             {
               "control-id": "annex11-10-change-control",
               "description": "Changes are made only through a defined, controlled procedure: a reviewed, approved, merged pull request.",
               "props": [
                 { "name": "Rule_Id", "value": "pr-change-control" }
+              ]
+            },
+            {
+              "control-id": "annex11-11-periodic-evaluation",
+              "description": "The system is continuously evaluated to confirm it remains in a valid state: GitOps reconciliation flags any drift from the validated state in Git.",
+              "props": [
+                { "name": "Rule_Id", "value": "gitops-drift-control" }
               ]
             }
           ]

@@ -507,6 +507,62 @@ func TestPolicyReportRequiresTwoPositionalArgs(t *testing.T) {
 	}
 }
 
+func TestDriftProducesEvidenceAndAppendsToLedger(t *testing.T) {
+	dir := t.TempDir()
+	apps := filepath.Join(dir, "apps.json")
+	writeFixture(t, apps, `{"items":[
+	  {"metadata":{"name":"mes"},"status":{"sync":{"status":"Synced"},"reconciledAt":"2026-06-06T08:14:00Z"}},
+	  {"metadata":{"name":"historian"},"status":{"sync":{"status":"OutOfSync"},"reconciledAt":"2026-06-06T08:14:00Z"}}
+	]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	// One application has drifted, so the run is flagged (exit 1).
+	if code := run([]string{"drift", apps, "annex11-11-periodic-evaluation", "--ledger", led}, &out); code != 1 {
+		t.Fatalf("expected exit 1 when an app is OutOfSync, got %d:\n%s", code, out.String())
+	}
+
+	var records []struct {
+		ControlID string `json:"control-id"`
+		Subject   string `json:"subject"`
+		Result    string `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &records); err != nil {
+		t.Fatalf("output is not a JSON array of records: %v\n%s", err, out.String())
+	}
+	if len(records) != 2 {
+		t.Fatalf("want 2 drift records, got %d", len(records))
+	}
+
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatalf("ledger not written: %v", err)
+	}
+	if !strings.Contains(string(data), "app/historian") {
+		t.Errorf("ledger missing the drifted app's record:\n%s", string(data))
+	}
+}
+
+func TestDriftAllSyncedExitsZero(t *testing.T) {
+	dir := t.TempDir()
+	apps := filepath.Join(dir, "apps.json")
+	writeFixture(t, apps, `{"items":[
+	  {"metadata":{"name":"mes"},"status":{"sync":{"status":"Synced"},"reconciledAt":"2026-06-06T08:14:00Z"}}
+	]}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"drift", apps, "annex11-11-periodic-evaluation"}, &out); code != 0 {
+		t.Fatalf("expected exit 0 when all apps are Synced, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestDriftRequiresAppFileAndControl(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"drift", "only-one-arg"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {
