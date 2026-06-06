@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "title": "GitOps change-control evidence components",
+    "version": "0.1.0"
+  },
+  "components": [
+    {
+      "title": "gitops",
+      "type": "process",
+      "description": "GitOps pull-request workflow whose merged, reviewed pull requests are the change-control evidence for the mapped controls.",
+      "props": [
+        { "name": "Rule_Id", "value": "pr-change-control", "remarks": "rule_set_00" },
+        { "name": "Rule_Description", "value": "Every platform change is a reviewed, approved, merged pull request.", "remarks": "rule_set_00" },
+        { "name": "Check_Id", "value": "gitops-pr-evidence", "remarks": "rule_set_00" },
+        { "name": "Check_Description", "value": "fabric evidence verifies a pull request is an attributable, time-stamped, approved and merged authorized change.", "remarks": "rule_set_00" }
+      ],
+      "control-implementations": [
+        {
+          "source": "controls/profiles/pharma-mes-baseline.json",
+          "description": "GitOps change control for the pharma MES baseline.",
+          "implemented-requirements": [
+            {
+              "control-id": "annex11-10-change-control",
+              "description": "Changes are made only through a defined, controlled procedure: a reviewed, approved, merged pull request.",
+              "props": [
+                { "name": "Rule_Id", "value": "pr-change-control" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

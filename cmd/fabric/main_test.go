@@ -169,6 +169,20 @@ func TestGenerateRequiresThreeArgs(t *testing.T) {
 	}
 }
 
+func TestAssessCoversChangeControlAsSatisfied(t *testing.T) {
+	var out bytes.Buffer
+	// --strict exits 0 only if every selected control is satisfied, so a clean
+	// exit plus the control's presence proves the change-control control is
+	// covered by its (non-Kyverno) GitOps component.
+	code := run([]string{"assess", "--strict", repoControlsDir(t)}, &out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 with change-control covered, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "annex11-10-change-control") {
+		t.Errorf("assess output missing annex11-10-change-control:\n%s", out.String())
+	}
+}
+
 func TestEvidenceValidChangeExitsZero(t *testing.T) {
 	dir := t.TempDir()
 	pr := filepath.Join(dir, "pr.json")
@@ -209,6 +223,45 @@ func TestEvidenceRequiresOneArg(t *testing.T) {
 	var out bytes.Buffer
 	if code := run([]string{"evidence"}, &out); code != 2 {
 		t.Fatalf("expected exit 2 for missing evidence arg, got %d", code)
+	}
+}
+
+func TestEvidenceWithControlIdEmitsJSONRecord(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 42, "state": "MERGED", "author": {"login": "kasjens"},
+  "mergedAt": "2026-06-05T14:30:00Z", "mergeCommit": {"oid": "32fa9af"},
+  "reviews": [{"author": {"login": "rev"}, "state": "APPROVED"}]
+}`)
+
+	var out bytes.Buffer
+	code := run([]string{"evidence", pr, "annex11-10-change-control"}, &out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for a valid change keyed to a control, got %d:\n%s", code, out.String())
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Fatalf("expected a JSON evidence record, got:\n%s", out.String())
+	}
+	for _, want := range []string{"control-id", "annex11-10-change-control", "satisfied"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("evidence record missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestEvidenceWithControlIdFlaggedExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{"number": 7, "state": "OPEN", "author": {"login": "kasjens"}, "reviews": []}`)
+
+	var out bytes.Buffer
+	code := run([]string{"evidence", pr, "annex11-10-change-control"}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for a flagged change, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "not-satisfied") {
+		t.Errorf("expected a not-satisfied record, got:\n%s", out.String())
 	}
 }
 

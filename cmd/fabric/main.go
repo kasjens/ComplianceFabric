@@ -27,7 +27,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric assess [--strict] <controls-dir>\n" +
 	"       fabric policies <controls-dir> <policies-dir>\n" +
 	"       fabric generate <controls-dir> <policies-dir> <out-dir>\n" +
-	"       fabric evidence <pr-json-file>"
+	"       fabric evidence <pr-json-file> [control-id]"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -53,6 +53,20 @@ func run(args []string, out io.Writer) int {
 		}
 	}
 
+	// evidence operates on a pull-request JSON file, not a controls directory,
+	// and takes an optional control id to key the emitted evidence record to.
+	if cmd == "evidence" {
+		if len(positional) < 1 || len(positional) > 2 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		controlID := ""
+		if len(positional) == 2 {
+			controlID = positional[1]
+		}
+		return runEvidence(positional[0], controlID, out)
+	}
+
 	wantArgs := 1
 	switch cmd {
 	case "policies":
@@ -63,11 +77,6 @@ func run(args []string, out io.Writer) int {
 	if len(positional) != wantArgs {
 		fmt.Fprintln(out, usage)
 		return 2
-	}
-
-	// evidence operates on a pull-request JSON file, not a controls directory.
-	if cmd == "evidence" {
-		return runEvidence(positional[0], out)
 	}
 
 	bundle, err := loader.Load(positional[0])
@@ -92,7 +101,7 @@ func run(args []string, out io.Writer) int {
 	return 2
 }
 
-func runEvidence(prFile string, out io.Writer) int {
+func runEvidence(prFile, controlID string, out io.Writer) int {
 	data, err := os.ReadFile(prFile)
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
@@ -103,6 +112,23 @@ func runEvidence(prFile string, out io.Writer) int {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
+
+	// With a control id, emit a machine-readable evidence-ledger record and exit
+	// non-zero when it is not a valid authorized change, so CI can gate on it.
+	if controlID != "" {
+		record := rec.AsEvidence(controlID)
+		enc := json.NewEncoder(out)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(record); err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+		if len(rec.Issues()) > 0 {
+			return 1
+		}
+		return 0
+	}
+
 	fmt.Fprintf(out, "PR #%d by %s\n", rec.Number, rec.Author)
 	fmt.Fprintf(out, "  merge commit: %s\n", rec.MergeCommit)
 	fmt.Fprintf(out, "  merged at:    %s\n", rec.MergedAt.Format("2006-01-02T15:04:05Z07:00"))

@@ -88,6 +88,45 @@ func TestIssuesFlagsUnmergedUnapprovedChange(t *testing.T) {
 	}
 }
 
+func TestAsEvidenceForValidChangeIsSatisfied(t *testing.T) {
+	rec, err := Extract([]byte(mergedPR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := rec.AsEvidence("annex11-change-control")
+
+	if ev.ControlID != "annex11-change-control" {
+		t.Errorf("ControlID = %q, want annex11-change-control", ev.ControlID)
+	}
+	if ev.Result != "satisfied" {
+		t.Errorf("Result = %q, want satisfied", ev.Result)
+	}
+	want := time.Date(2026, 6, 5, 14, 30, 0, 0, time.UTC)
+	if !ev.ObservedAt.Equal(want) {
+		t.Errorf("ObservedAt = %v, want %v (the merge time)", ev.ObservedAt, want)
+	}
+	if !strings.Contains(ev.Subject, "32fa9af0c0ffee") {
+		t.Errorf("Subject = %q, want it to reference the merge commit", ev.Subject)
+	}
+	if !strings.Contains(ev.Source, "42") {
+		t.Errorf("Source = %q, want it to reference the pull request", ev.Source)
+	}
+	if ev.Change.MergeCommit != "32fa9af0c0ffee" {
+		t.Errorf("Change evidence not embedded: %+v", ev.Change)
+	}
+}
+
+func TestAsEvidenceForFlaggedChangeIsNotSatisfied(t *testing.T) {
+	rec, err := Extract([]byte(openPR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ev := rec.AsEvidence("annex11-change-control")
+	if ev.Result != "not-satisfied" {
+		t.Errorf("Result = %q, want not-satisfied for an unmerged, unapproved change", ev.Result)
+	}
+}
+
 func TestExtractDeduplicatesRepeatedApprover(t *testing.T) {
 	rec, err := Extract([]byte(mergedPR))
 	if err != nil {
