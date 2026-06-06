@@ -14,6 +14,7 @@
     {
       "href": "cfr-part-11",
       "include-controls": [
+        "cfr-part-11-10a-system-validation",
         "cfr-part-11-10d-access-control",
         "cfr-part-11-10e-audit-trail"
       ]

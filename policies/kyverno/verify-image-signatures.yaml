@@ -1,0 +1,35 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: verify-image-signatures
+  annotations:
+    fabric.control-id: cfr-part-11-10a-system-validation
+    policies.kyverno.io/title: Verify image signatures
+    policies.kyverno.io/description: >-
+      Admit only container images whose Sigstore keyless signature chains to the
+      project's trusted CI identity, so the software running is authentic and
+      unaltered. Adopters must replace the subject and issuer below with their
+      own signing identity.
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: verify-signed-images
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      verifyImages:
+        - imageReferences:
+            - "*"
+          required: true
+          mutateDigest: true
+          attestors:
+            - count: 1
+              entries:
+                - keyless:
+                    subject: "https://github.com/kasjens/ComplianceFabric/.github/workflows/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev

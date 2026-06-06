@@ -27,13 +27,25 @@
         { "name": "Rule_Id", "value": "audit-logging-annotation", "remarks": "rule_set_03" },
         { "name": "Rule_Description", "value": "Workloads must declare an audit-logging annotation so actions reach the audit trail.", "remarks": "rule_set_03" },
         { "name": "Check_Id", "value": "require-audit-logging-annotations", "remarks": "rule_set_03" },
-        { "name": "Check_Description", "value": "Require the gxp.compliancefabric.io/audit-logging annotation on Pods.", "remarks": "rule_set_03" }
+        { "name": "Check_Description", "value": "Require the gxp.compliancefabric.io/audit-logging annotation on Pods.", "remarks": "rule_set_03" },
+
+        { "name": "Rule_Id", "value": "verified-image-provenance", "remarks": "rule_set_04" },
+        { "name": "Rule_Description", "value": "Workloads must run only authentic, signed container images.", "remarks": "rule_set_04" },
+        { "name": "Check_Id", "value": "verify-image-signatures", "remarks": "rule_set_04" },
+        { "name": "Check_Description", "value": "Verify Sigstore keyless image signatures at admission against the trusted CI identity.", "remarks": "rule_set_04" }
       ],
       "control-implementations": [
         {
           "source": "controls/profiles/pharma-mes-baseline.json",
           "description": "Kyverno enforcement for the pharma MES baseline.",
           "implemented-requirements": [
+            {
+              "control-id": "cfr-part-11-10a-system-validation",
+              "description": "Admit only authentic, signed container images so the running software is validated and unaltered.",
+              "props": [
+                { "name": "Rule_Id", "value": "verified-image-provenance" }
+              ]
+            },
             {
               "control-id": "annex11-12-1-access-control",
               "description": "Restrict cluster access to authorised workloads via least-privilege admission policy.",
