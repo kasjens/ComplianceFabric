@@ -32,6 +32,18 @@ FABRIC="$WORK/fabric"
 log()  { printf '\n=== %s ===\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
+# Retry a command a few times. Kyverno registers its policy webhooks a moment
+# after the deployment reports Ready, so the first policy apply can race the
+# webhook endpoint coming up ("connection refused" calling the webhook).
+retry() {
+  local n=0
+  until "$@"; do
+    n=$((n + 1))
+    [ "$n" -ge 12 ] && return 1
+    sleep 5
+  done
+}
+
 cleanup() {
   if [ "${KEEP_CLUSTER:-}" = "1" ]; then
     log "KEEP_CLUSTER=1, leaving cluster $CLUSTER running"
@@ -57,11 +69,13 @@ log "installing Kyverno $KYVERNO_VER"
 kubectl apply --server-side --force-conflicts \
   -f "https://github.com/kyverno/kyverno/releases/download/$KYVERNO_VER/install.yaml"
 kubectl -n kyverno rollout status deployment/kyverno-admission-controller --timeout=180s
+kubectl -n kyverno wait --for=condition=Available deployment --all --timeout=180s
 
 log "applying Phase 1 policy library (image-signature policy excluded - Phase 2)"
 for p in disallow-cluster-admin-binding require-audit-logging-annotations \
          require-run-as-non-root restrict-anonymous-access; do
-  kubectl apply -f "$REPO_ROOT/policies/kyverno/$p.yaml"
+  retry kubectl apply -f "$REPO_ROOT/policies/kyverno/$p.yaml" \
+    || fail "could not apply policy $p (Kyverno webhook never became ready)"
 done
 # Wait for the validating policies to report Ready so admission is live.
 for p in require-audit-logging-annotations require-run-as-non-root; do

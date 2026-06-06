@@ -66,6 +66,18 @@ export COSIGN_YES="true"
 log()  { printf '\n=== %s ===\n' "$*"; }
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
+# Kyverno registers its policy webhooks a moment after the deployment reports
+# Ready, so the first policy apply can race the webhook coming up ("connection
+# refused" calling the webhook); retry to absorb that.
+retry() {
+  local n=0
+  until "$@"; do
+    n=$((n + 1))
+    [ "$n" -ge 12 ] && return 1
+    sleep 5
+  done
+}
+
 need() { command -v "$1" >/dev/null 2>&1 || fail "required tool not found: $1"; }
 for t in syft docker kind kubectl go python3 curl; do need "$t"; done
 
@@ -152,6 +164,7 @@ kubectl config use-context "kind-$CLUSTER"
 kubectl apply --server-side --force-conflicts \
   -f "https://github.com/kyverno/kyverno/releases/download/$KYVERNO_VER/install.yaml"
 kubectl -n kyverno rollout status deployment/kyverno-admission-controller --timeout=180s
+kubectl -n kyverno wait --for=condition=Available deployment --all --timeout=180s
 
 log "applying a key-based verifyImages policy"
 PUBKEY="$(cat "$PUB")"
@@ -185,7 +198,8 @@ spec:
 YAML
   printf '%s\n' "$PUBKEY" | sed 's/^/                      /'
 } > "$POLICY"
-kubectl apply -f "$POLICY"
+retry kubectl apply -f "$POLICY" \
+  || fail "could not apply the verifyImages policy (Kyverno webhook never became ready)"
 kubectl wait --for=condition=Ready clusterpolicy/verify-image-signatures-keyed --timeout=90s
 
 kubectl create namespace "$NS" --dry-run=client -o yaml | kubectl apply -f -
