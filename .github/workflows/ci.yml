@@ -73,3 +73,33 @@ jobs:
 
       - name: Prove live admission enforcement
         run: bash test/e2e/admission.sh
+
+  keyless-e2e:
+    name: Phase 2 keyless admit-path e2e (kind)
+    runs-on: ubuntu-latest
+    needs: build
+    # Keyless signing needs the repo's own OIDC identity; forks cannot mint it,
+    # so skip there rather than fail.
+    if: github.repository == 'kasjens/ComplianceFabric'
+    permissions:
+      contents: read
+      # Required so cosign can mint a Fulcio certificate from the Actions OIDC
+      # token and produce the keyless signature the production policy trusts.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kind
+        run: |
+          curl -fsSLo /usr/local/bin/kind \
+            https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+          chmod +x /usr/local/bin/kind
+
+      - name: Install kubectl
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl \
+            "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x /usr/local/bin/kubectl
+
+      - name: Prove keyless signature admit/deny against the production policy
+        run: bash test/e2e/keyless-ci.sh
