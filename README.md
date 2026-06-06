@@ -1,4 +1,4 @@
-# GxP Compliance Fabric
+# Compliance Fabric
 
 A continuous-compliance control and evidence layer for regulated Kubernetes platforms. Author controls once, enforce them as policy, and produce audit-ready evidence on demand.
 

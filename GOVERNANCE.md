@@ -1,6 +1,6 @@
 # Governance
 
-This document describes how the GxP Compliance Fabric is run, how decisions are made, and where the open-core boundary sits.
+This document describes how the Compliance Fabric is run, how decisions are made, and where the open-core boundary sits.
 
 ## Roles
 

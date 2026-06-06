@@ -1,4 +1,4 @@
-// Command fabric is the CLI for the GxP Compliance Fabric. Today it validates a
+// Command fabric is the CLI for the Compliance Fabric. Today it validates a
 // controls/ directory of OSCAL documents for internal consistency.
 package main
 

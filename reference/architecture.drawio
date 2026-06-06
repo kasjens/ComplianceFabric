@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <mxfile host="app.diagrams.net" type="device" compressed="false">
-  <diagram id="gxp-compliance-fabric" name="GxP Compliance Fabric - Reference Architecture">
+  <diagram id="gxp-compliance-fabric" name="Compliance Fabric - Reference Architecture">
     <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1240" background="#ffffff" math="0" shadow="0">
       <root>
         <mxCell id="0"/>
         <mxCell id="1" parent="0"/>
 
-        <mxCell id="title" value="GxP Compliance Fabric &#183; Reference architecture (Kubernetes)" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1a1a1a;" vertex="1" parent="1">
+        <mxCell id="title" value="Compliance Fabric &#183; Reference architecture (Kubernetes)" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1a1a1a;" vertex="1" parent="1">
           <mxGeometry x="40" y="18" width="1574" height="34" as="geometry"/>
         </mxCell>
         <mxCell id="subtitle" value="A continuous-compliance control and evidence layer woven across a regulated Kubernetes platform. Authored controls become enforced policy; running state becomes audit-ready evidence." style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">

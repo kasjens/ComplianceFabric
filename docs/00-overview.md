@@ -1,6 +1,6 @@
 # Overview
 
-The GxP Compliance Fabric is a control and evidence layer that runs across a regulated Kubernetes platform. It keeps a system continuously demonstrable against its regulatory controls, rather than letting compliance drift between periodic audits.
+The Compliance Fabric is a control and evidence layer that runs across a regulated Kubernetes platform. It keeps a system continuously demonstrable against its regulatory controls, rather than letting compliance drift between periodic audits.
 
 ## The problem
 

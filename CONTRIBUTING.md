@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in the GxP Compliance Fabric. This project is built in the open, and contributions of control mappings, policy templates, integrations, documentation, and issues are all welcome.
+Thanks for your interest in the Compliance Fabric. This project is built in the open, and contributions of control mappings, policy templates, integrations, documentation, and issues are all welcome.
 
 ## Before you start
 
