@@ -61,15 +61,16 @@ jobs:
 
       - name: Install kind
         run: |
-          curl -fsSLo /usr/local/bin/kind \
-            https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
-          chmod +x /usr/local/bin/kind
+          curl -fsSLo kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
 
       - name: Install kubectl
         run: |
-          curl -fsSLo /usr/local/bin/kubectl \
+          curl -fsSLo kubectl \
             "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x /usr/local/bin/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
 
       - name: Prove live admission enforcement
         run: bash test/e2e/admission.sh
@@ -91,15 +92,16 @@ jobs:
 
       - name: Install kind
         run: |
-          curl -fsSLo /usr/local/bin/kind \
-            https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
-          chmod +x /usr/local/bin/kind
+          curl -fsSLo kind https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
 
       - name: Install kubectl
         run: |
-          curl -fsSLo /usr/local/bin/kubectl \
+          curl -fsSLo kubectl \
             "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
-          chmod +x /usr/local/bin/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
 
       - name: Prove keyless signature admit/deny against the production policy
         run: bash test/e2e/keyless-ci.sh
