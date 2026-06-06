@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "title": "Software supply-chain provenance evidence component",
+    "version": "0.1.0"
+  },
+  "components": [
+    {
+      "title": "supply-chain",
+      "type": "process",
+      "description": "Build pipeline that signs a SLSA provenance attestation for every released artifact, so a deployed image can be tied back to the trusted build that produced it.",
+      "props": [
+        { "name": "Rule_Id", "value": "build-provenance", "remarks": "rule_set_00" },
+        { "name": "Rule_Description", "value": "Every released artifact carries a SLSA provenance attestation from the trusted build pipeline.", "remarks": "rule_set_00" },
+        { "name": "Check_Id", "value": "provenance-attestation", "remarks": "rule_set_00" },
+        { "name": "Check_Description", "value": "fabric provenance verifies a SLSA build-provenance attestation names the expected trusted builder, tying the artifact to its build.", "remarks": "rule_set_00" }
+      ],
+      "control-implementations": [
+        {
+          "source": "controls/profiles/pharma-mes-baseline.json",
+          "description": "Build provenance attestation for the pharma MES baseline.",
+          "implemented-requirements": [
+            {
+              "control-id": "cfr-part-11-10a-system-validation",
+              "description": "The ability to discern altered records: a SLSA provenance attestation ties each deployed artifact to the trusted pipeline that built it, so an artifact built outside that pipeline is detectable.",
+              "props": [
+                { "name": "Rule_Id", "value": "build-provenance" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

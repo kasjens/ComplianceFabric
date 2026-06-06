@@ -22,6 +22,8 @@ cosign sign registry.example.internal/mes:1.4.2
 
 Admission then verifies the signature and provenance before allowing the workload, as shown in `03-policy-enforcement.md`. The rule is simple: no valid signature and provenance, no deploy.
 
+**Implementation status:** `fabric provenance <provenance-json-file> <expected-builder-id> <control-id>` is an evidence producer for the SLSA provenance attestation. It reads an in-toto v1 provenance statement — the decoded payload from `cosign verify-attestation --type slsaprovenance --output json` — and records, per attested artifact, whether the statement is a SLSA provenance attestation built by the expected trusted builder (satisfied) or not (not-satisfied, so an artifact built outside the trusted pipeline is detectable). Records key to the `cfr-part-11-10a-system-validation` control — implemented for this mechanism by a non-Kyverno `supply-chain` component alongside the Kyverno `verify-image-signatures` admission check — and feed the same ledger, `--ledger <path>` to append. The signing and attestation steps themselves (cosign/syft in CI) and the SBOM producer are not yet wired; this producer consumes the verified provenance and turns it into control evidence.
+
 ## Change control through GitOps
 
 Git is the desired state of the platform. Argo CD or Flux reconciles the cluster to match it. Two compliance properties fall out of this directly:

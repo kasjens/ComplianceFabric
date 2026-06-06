@@ -37,6 +37,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric drift <argo-apps-json-file> <control-id> [--ledger <path>]\n" +
 	"       fabric trace <traces-json-file> <registry-dir> <control-id> [--ledger <path>]\n" +
 	"       fabric eval-gate <eval-run-file> <gate-file> <control-id> [--ledger <path>]\n" +
+	"       fabric provenance <provenance-json-file> <expected-builder-id> <control-id> [--ledger <path>]\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>\n" +
 	"       fabric registry validate <registry-dir>"
 
@@ -46,7 +47,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "ledger": true, "registry": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "ledger": true, "registry": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -62,7 +63,7 @@ func run(args []string, out io.Writer) int {
 		switch {
 		case cmd == "assess" && a == "--strict":
 			strict = true
-		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate") && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -132,6 +133,17 @@ func run(args []string, out io.Writer) int {
 			return 2
 		}
 		return runEvalGate(positional[0], positional[1], positional[2], ledgerPath, out)
+	}
+
+	// provenance turns a SLSA build-provenance attestation into evidence keyed to
+	// the given control, satisfied only when the artifact was built by the
+	// expected trusted builder.
+	if cmd == "provenance" {
+		if len(positional) != 3 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runProvenance(positional[0], positional[1], positional[2], ledgerPath, out)
 	}
 
 	// registry validate checks an agent/prompt/tool registry directory for
@@ -384,6 +396,20 @@ func runEvalGate(runFile, gateFile, controlID, ledgerPath string, out io.Writer)
 		return 2
 	}
 	records, err := evidence.FromEvalGate(runData, gate, controlID)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return emitRecords(records, ledgerPath, out)
+}
+
+func runProvenance(provenanceFile, expectedBuilder, controlID, ledgerPath string, out io.Writer) int {
+	data, err := os.ReadFile(provenanceFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := evidence.FromProvenance(data, expectedBuilder, controlID)
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2

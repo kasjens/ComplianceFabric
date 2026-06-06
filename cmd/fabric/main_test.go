@@ -563,6 +563,64 @@ func TestDriftRequiresAppFileAndControl(t *testing.T) {
 	}
 }
 
+func TestProvenanceTrustedBuilderAppendsSatisfiedEvidence(t *testing.T) {
+	dir := t.TempDir()
+	att := filepath.Join(dir, "provenance.json")
+	builder := "https://github.com/kasjens/ComplianceFabric/.github/workflows/release.yml@refs/heads/main"
+	writeFixture(t, att, `{
+	  "_type": "https://in-toto.io/Statement/v1",
+	  "subject": [{ "name": "registry.example/mes", "digest": { "sha256": "1f2e" } }],
+	  "predicateType": "https://slsa.dev/provenance/v1",
+	  "predicate": { "runDetails": { "builder": { "id": "`+builder+`" },
+	    "metadata": { "finishedOn": "2026-06-06T10:05:00Z" } } }
+	}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"provenance", att, builder, "cfr-part-11-10a-system-validation", "--ledger", led}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for trusted-builder provenance, got %d:\n%s", code, out.String())
+	}
+	var records []struct {
+		ControlID string `json:"control-id"`
+		Result    string `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &records); err != nil {
+		t.Fatalf("output is not a JSON array of records: %v\n%s", err, out.String())
+	}
+	if len(records) != 1 || records[0].Result != "satisfied" {
+		t.Fatalf("want 1 satisfied record, got %+v", records)
+	}
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatalf("ledger not written: %v", err)
+	}
+	if !strings.Contains(string(data), "slsa-provenance") {
+		t.Errorf("ledger missing the provenance record:\n%s", string(data))
+	}
+}
+
+func TestProvenanceUntrustedBuilderExitsOne(t *testing.T) {
+	dir := t.TempDir()
+	att := filepath.Join(dir, "provenance.json")
+	writeFixture(t, att, `{
+	  "subject": [{ "name": "registry.example/mes", "digest": { "sha256": "1f2e" } }],
+	  "predicateType": "https://slsa.dev/provenance/v1",
+	  "predicate": { "runDetails": { "builder": { "id": "https://evil.example/x" } } }
+	}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"provenance", att, "https://github.com/kasjens/ComplianceFabric/.github/workflows/release.yml@refs/heads/main", "cfr-part-11-10a-system-validation"}, &out); code != 1 {
+		t.Fatalf("expected exit 1 for an untrusted builder, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestProvenanceRequiresThreePositionals(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"provenance", "only", "two"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {
