@@ -15,6 +15,7 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/generate"
 	"github.com/kasjens/ComplianceFabric/internal/ledger"
 	"github.com/kasjens/ComplianceFabric/internal/loader"
+	"github.com/kasjens/ComplianceFabric/internal/oscal"
 	"github.com/kasjens/ComplianceFabric/internal/policies"
 	"github.com/kasjens/ComplianceFabric/internal/posture"
 	"github.com/kasjens/ComplianceFabric/internal/report"
@@ -30,6 +31,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric policies <controls-dir> <policies-dir>\n" +
 	"       fabric generate <controls-dir> <policies-dir> <out-dir>\n" +
 	"       fabric evidence <pr-json-file> [control-id] [--ledger <path>]\n" +
+	"       fabric policy-report <report-json-file> <policies-dir> [--ledger <path>]\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>"
 
 // run executes the CLI and returns the process exit code:
@@ -38,7 +40,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "ledger": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "ledger": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -54,7 +56,7 @@ func run(args []string, out io.Writer) int {
 		switch {
 		case cmd == "assess" && a == "--strict":
 			strict = true
-		case cmd == "evidence" && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -103,6 +105,16 @@ func run(args []string, out io.Writer) int {
 			fmt.Fprintln(out, usage)
 			return 2
 		}
+	}
+
+	// policy-report turns a Kyverno PolicyReport into evidence records keyed to
+	// the controls the reported policies enforce, mapped via the policy library.
+	if cmd == "policy-report" {
+		if len(positional) != 2 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runPolicyReport(positional[0], positional[1], ledgerPath, out)
 	}
 
 	wantArgs := 1
@@ -190,6 +202,48 @@ func runEvidence(prFile, controlID, ledgerPath string, out io.Writer) int {
 		fmt.Fprintf(out, "  [error] change-control: %s\n", msg)
 	}
 	return 1
+}
+
+func runPolicyReport(reportFile, policiesDir, ledgerPath string, out io.Writer) int {
+	data, err := os.ReadFile(reportFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	policyControls, err := policies.ControlsByPolicy(policiesDir)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := evidence.FromPolicyReport(data, policyControls)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+
+	if ledgerPath != "" {
+		l := ledger.Open(ledgerPath)
+		for _, rec := range records {
+			if _, err := l.Append(rec); err != nil {
+				fmt.Fprintf(out, "error: %v\n", err)
+				return 2
+			}
+		}
+	}
+
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(records); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+
+	for _, rec := range records {
+		if rec.Result != oscal.StatusSatisfied {
+			return 1
+		}
+	}
+	return 0
 }
 
 func runLedgerVerify(path string, out io.Writer) int {

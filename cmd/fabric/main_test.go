@@ -434,6 +434,79 @@ func TestLedgerAssessExitsNonZeroOnNotSatisfied(t *testing.T) {
 	}
 }
 
+// writePolicyFixture writes a minimal Kyverno policy carrying a control-id
+// annotation under <dir>/kyverno/<name>.yaml.
+func writePolicyFixture(t *testing.T, dir, name, controlID string) {
+	t.Helper()
+	body := "apiVersion: kyverno.io/v1\nkind: ClusterPolicy\nmetadata:\n  name: " + name +
+		"\n  annotations:\n    fabric.control-id: " + controlID + "\n"
+	writeFixture(t, filepath.Join(dir, "kyverno", name+".yaml"), body)
+}
+
+func TestPolicyReportProducesEvidenceAndAppendsToLedger(t *testing.T) {
+	dir := t.TempDir()
+	pol := filepath.Join(dir, "policies")
+	writePolicyFixture(t, pol, "require-run-as-non-root", "annex11-12-1-access-control")
+	writePolicyFixture(t, pol, "require-audit-logging-annotations", "annex11-9-audit-trail")
+
+	report := filepath.Join(dir, "report.json")
+	writeFixture(t, report, `{"results":[
+	  {"policy":"require-run-as-non-root","result":"pass",
+	   "resources":[{"kind":"Pod","namespace":"mes","name":"ok"}],"timestamp":{"seconds":1717661640}},
+	  {"policy":"require-audit-logging-annotations","result":"fail",
+	   "resources":[{"kind":"Pod","namespace":"mes","name":"bad"}],"timestamp":{"seconds":1717661640}}
+	]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	// A failing result is recorded but flags the run, so the command exits 1.
+	if code := run([]string{"policy-report", report, pol, "--ledger", led}, &out); code != 1 {
+		t.Fatalf("expected exit 1 when a result fails, got %d:\n%s", code, out.String())
+	}
+
+	var records []struct {
+		ControlID string `json:"control-id"`
+		Result    string `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &records); err != nil {
+		t.Fatalf("output is not a JSON array of records: %v\n%s", err, out.String())
+	}
+	if len(records) != 2 {
+		t.Fatalf("want 2 evidence records, got %d", len(records))
+	}
+
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatalf("ledger not written: %v", err)
+	}
+	if !strings.Contains(string(data), "annex11-9-audit-trail") {
+		t.Errorf("ledger missing the failing control's record:\n%s", string(data))
+	}
+}
+
+func TestPolicyReportAllPassExitsZero(t *testing.T) {
+	dir := t.TempDir()
+	pol := filepath.Join(dir, "policies")
+	writePolicyFixture(t, pol, "require-run-as-non-root", "annex11-12-1-access-control")
+	report := filepath.Join(dir, "report.json")
+	writeFixture(t, report, `{"results":[
+	  {"policy":"require-run-as-non-root","result":"pass",
+	   "resources":[{"kind":"Pod","namespace":"mes","name":"ok"}],"timestamp":{"seconds":1717661640}}
+	]}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"policy-report", report, pol}, &out); code != 0 {
+		t.Fatalf("expected exit 0 when all results pass, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestPolicyReportRequiresTwoPositionalArgs(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"policy-report", "only-one-arg"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {

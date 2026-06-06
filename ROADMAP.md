@@ -26,7 +26,7 @@ The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architec
 ## Phase 3: Evidence and reporting
 
 - An append-only evidence ledger keyed to control identifiers. **Done:** the `internal/ledger` store chains records by hash (tamper-evident, JSON Lines); `fabric evidence --ledger` appends and `fabric ledger verify` checks the chain.
-- Continuous assessment across the mapped controls. `fabric ledger assess` normalizes the ledger into OSCAL assessment-results today; remaining is collecting the other evidence sources (policy reports, attestations, drift, agent traces) continuously.
+- Continuous assessment across the mapped controls. `fabric ledger assess` normalizes the ledger into OSCAL assessment-results, and two producers feed it: change-control from pull requests (`fabric evidence`) and Kyverno policy results (`fabric policy-report`). Remaining is the other sources (image attestations, drift, agent traces) and collecting them continuously rather than on invocation.
 - A posture view of live control coverage. **Done:** `fabric ledger posture` rolls the ledger up per control (latest observed result, observation count, lapses); remaining is the live dashboard surface over it.
 
 ## Phase 4: AI agent governance

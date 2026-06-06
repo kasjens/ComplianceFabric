@@ -102,6 +102,33 @@ func TestVerifyFlagsAnnotationMismatch(t *testing.T) {
 	}
 }
 
+func TestControlsByPolicyMapsEachPolicyToItsControls(t *testing.T) {
+	dir := t.TempDir()
+	writePolicy(t, dir, "require-run-as-non-root", "annex11-12-1-access-control")
+	writePolicy(t, dir, "multi", "control-a, control-b")
+
+	m, err := ControlsByPolicy(dir)
+	if err != nil {
+		t.Fatalf("ControlsByPolicy: %v", err)
+	}
+	if got := m["require-run-as-non-root"]; len(got) != 1 || got[0] != "annex11-12-1-access-control" {
+		t.Errorf("require-run-as-non-root -> %v", got)
+	}
+	if got := m["multi"]; len(got) != 2 || got[0] != "control-a" || got[1] != "control-b" {
+		t.Errorf("multi -> %v, want [control-a control-b]", got)
+	}
+}
+
+func TestControlsByPolicyEmptyForNoPolicyDir(t *testing.T) {
+	m, err := ControlsByPolicy(t.TempDir())
+	if err != nil {
+		t.Fatalf("ControlsByPolicy on an empty tree: %v", err)
+	}
+	if len(m) != 0 {
+		t.Errorf("want empty map, got %v", m)
+	}
+}
+
 func TestVerifyIgnoresNonKyvernoComponents(t *testing.T) {
 	dir := t.TempDir()
 	if fs := Verify(bundleMapping("c1", "append-only-storage", "evidence-ledger"), dir); len(fs) != 0 {

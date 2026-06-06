@@ -32,6 +32,30 @@ func ExtractControlIDs(doc []byte) []string {
 	return nil
 }
 
+// ControlsByPolicy scans policiesDir/kyverno/*.yaml and returns a map from each
+// policy name (the file's base name without extension, which matches the
+// ClusterPolicy metadata.name a PolicyReport references) to the control ids it
+// annotates with fabric.control-id. Policies without the annotation are omitted.
+// A missing kyverno directory yields an empty map, not an error.
+func ControlsByPolicy(policiesDir string) (map[string][]string, error) {
+	matches, err := filepath.Glob(filepath.Join(policiesDir, "kyverno", "*.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string)
+	for _, path := range matches {
+		doc, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		if ids := ExtractControlIDs(doc); len(ids) > 0 {
+			name := strings.TrimSuffix(filepath.Base(path), ".yaml")
+			out[name] = ids
+		}
+	}
+	return out, nil
+}
+
 // Verify checks that every Kyverno-backed control mapping in the bundle is
 // realized by a policy file under policiesDir/kyverno/<policyID>.yaml whose
 // fabric.control-id annotation includes the mapped control. Non-Kyverno

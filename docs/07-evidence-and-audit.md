@@ -6,6 +6,8 @@ This layer turns platform state into audit-ready evidence and produces the docum
 
 Policy results, image attestations, drift status, and agent traces are collected continuously and scored against the controls. Compliance-to-Policy normalizes engine results into OSCAL assessment results, so each data point references the control it bears on. Assessment is a constant background process, not an audit-time scramble.
 
+**Implementation status:** two producers feed the ledger today. `fabric evidence` derives change-control records from pull requests (see `04-trusted-delivery.md`), and `fabric policy-report <report-json-file> <policies-dir>` turns a Kyverno PolicyReport into evidence records: it maps each result's policy back to the controls it enforces via the policy library's `fabric.control-id` annotations, scoring a pass as satisfied and a fail, error, or warn as not-satisfied. Image attestations, drift, and agent traces are not yet wired, and collection is on invocation rather than continuous.
+
 ## The evidence ledger
 
 Evidence is written to an append-only, tamper-evident store. No component, including the Fabric's own operators, can rewrite history. Each record is keyed to a control identifier and a timestamp, and where it concerns an artifact it references the transparency-log entry for that artifact. The append-only property is what makes the evidence defensible: a reviewer can trust that it was not edited to pass.

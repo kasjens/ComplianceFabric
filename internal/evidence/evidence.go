@@ -53,12 +53,12 @@ func (r ChangeRecord) Issues() []string {
 // model in docs/07-evidence-and-audit.md. It carries the embedded change record
 // as the raw evidence behind the result.
 type Record struct {
-	ControlID  string       `json:"control-id"`
-	Subject    string       `json:"subject"`
-	Result     string       `json:"result"`
-	ObservedAt time.Time    `json:"observed-at"`
-	Source     string       `json:"source"`
-	Change     ChangeRecord `json:"change"`
+	ControlID  string        `json:"control-id"`
+	Subject    string        `json:"subject"`
+	Result     string        `json:"result"`
+	ObservedAt time.Time     `json:"observed-at"`
+	Source     string        `json:"source"`
+	Change     *ChangeRecord `json:"change,omitempty"`
 }
 
 // AsEvidence turns a change-control record into an evidence-ledger entry for the
@@ -76,7 +76,7 @@ func (r ChangeRecord) AsEvidence(controlID string) Record {
 		Result:     result,
 		ObservedAt: r.MergedAt,
 		Source:     fmt.Sprintf("github/pull-request#%d", r.Number),
-		Change:     r,
+		Change:     &r,
 	}
 }
 
