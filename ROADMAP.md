@@ -2,7 +2,7 @@
 
 This roadmap shows the order the project plans to build in. It is a direction, not a set of dates, and it changes as contributors join and priorities shift. Open an issue to propose a change.
 
-The phases follow the six layers in `docs/01-architecture.md`, built from the foundation up so each phase produces something usable on its own.
+The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architecture.md), built from the foundation up so each phase produces something usable on its own.
 
 ## Phase 0: Documentation and design (current)
 
@@ -42,4 +42,4 @@ The phases follow the six layers in `docs/01-architecture.md`, built from the fo
 
 ## Outside the open core
 
-Audit-pack and validation-report generation, certified GxP control packs, and a hosted control plane are part of the commercial layer described in `GOVERNANCE.md`. They are listed here so the boundary is clear, not because they are planned for this repository.
+Audit-pack and validation-report generation, certified GxP control packs, and a hosted control plane are part of the commercial layer described in [`GOVERNANCE.md`](GOVERNANCE.md). They are listed here so the boundary is clear, not because they are planned for this repository.

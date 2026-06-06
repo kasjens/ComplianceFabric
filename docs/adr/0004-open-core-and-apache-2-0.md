@@ -6,7 +6,7 @@ Accepted (reference design).
 
 ## Context
 
-The project needs two things that pull in different directions. It needs community contribution, because a single founder cannot build and maintain control mappings across every framework alone. It also needs a revenue path, because the GxP control library and the validation-report generation are the parts that are hard to build and were identified as the product's intellectual property in `docs/10-build-vs-buy.md`.
+The project needs two things that pull in different directions. It needs community contribution, because a single founder cannot build and maintain control mappings across every framework alone. It also needs a revenue path, because the GxP control library and the validation-report generation are the parts that are hard to build and were identified as the product's intellectual property in [`docs/10-build-vs-buy.md`](../10-build-vs-buy.md).
 
 A fully closed product loses the trust advantage that matters in compliance tooling and gets no community help. A fully permissive release with no commercial layer gives away the work that funds the project and leaves no way to sustain it.
 

@@ -4,12 +4,12 @@ The Fabric is six layers stacked around one control loop. Authored controls flow
 
 ## The six layers
 
-1. Control authoring. Controls as code in OSCAL, including a GxP set (GAMP 5, Annex 11, Part 11, ALCOA+) and cross-sector profiles (DORA, NIS2, ISO 42001, EU AI Act). See `02-control-authoring.md`.
-2. Policy translation and enforcement. Controls compiled into Kubernetes policy and enforced at CI, admission, and runtime. See `03-policy-enforcement.md`.
-3. Trusted delivery and change control. Signed, provenance-bearing artifacts and GitOps-driven change. See `04-trusted-delivery.md`.
-4. AI agent governance. A gateway, an agent registry, guardrails, and tracing for every agent action. See `05-agent-governance.md`.
-5. Regulated Kubernetes platform. The cluster fleet, regulated workloads, identity, and observability the Fabric runs over. See `06-platform-substrate.md`.
-6. Evidence, assessment, and audit. Continuous assessment, an immutable evidence ledger, and on-demand audit packs. See `07-evidence-and-audit.md`.
+1. Control authoring. Controls as code in OSCAL, including a GxP set (GAMP 5, Annex 11, Part 11, ALCOA+) and cross-sector profiles (DORA, NIS2, ISO 42001, EU AI Act). See [`02-control-authoring.md`](02-control-authoring.md).
+2. Policy translation and enforcement. Controls compiled into Kubernetes policy and enforced at CI, admission, and runtime. See [`03-policy-enforcement.md`](03-policy-enforcement.md).
+3. Trusted delivery and change control. Signed, provenance-bearing artifacts and GitOps-driven change. See [`04-trusted-delivery.md`](04-trusted-delivery.md).
+4. AI agent governance. A gateway, an agent registry, guardrails, and tracing for every agent action. See [`05-agent-governance.md`](05-agent-governance.md).
+5. Regulated Kubernetes platform. The cluster fleet, regulated workloads, identity, and observability the Fabric runs over. See [`06-platform-substrate.md`](06-platform-substrate.md).
+6. Evidence, assessment, and audit. Continuous assessment, an immutable evidence ledger, and on-demand audit packs. See [`07-evidence-and-audit.md`](07-evidence-and-audit.md).
 
 ## Data flow
 
@@ -28,6 +28,6 @@ Upward (state to evidence): policy results, image attestations, drift status, an
 
 ## Deployment model
 
-The Fabric is delivered as a set of Kubernetes operators and controllers installed on the customer's clusters, plus a control plane for authoring and reporting. Customer data and evidence stay in the customer's environment, which supports sovereign-cloud requirements. The control plane holds control definitions, mappings, and report templates, not regulated data.
+The Fabric is delivered as a set of Kubernetes operators and controllers installed on the user's clusters, plus a control plane for authoring and reporting. User data and evidence stay in the user's environment, which supports sovereign-cloud requirements. The control plane holds control definitions, mappings, and report templates, not regulated data.
 
 Multi-cluster fleets are managed through Open Cluster Management, so one set of controls applies across clusters and regions with per-cluster assessment results.

@@ -1,6 +1,6 @@
 # Maintainers
 
-This file lists the people who review and merge changes and guide the project. See `GOVERNANCE.md` for the roles and how to become a maintainer.
+This file lists the people who review and merge changes and guide the project. See [`GOVERNANCE.md`](GOVERNANCE.md) for the roles and how to become a maintainer.
 
 ## Lead maintainer
 
@@ -8,7 +8,7 @@ This file lists the people who review and merge changes and guide the project. S
 
 ## Maintainers
 
-The project currently has a single lead maintainer. As contributors take on review and direction, they are added here, and the tie-break role of the lead maintainer moves to the maintainer group as described in `GOVERNANCE.md`.
+The project currently has a single lead maintainer. As contributors take on review and direction, they are added here, and the tie-break role of the lead maintainer moves to the maintainer group as described in [`GOVERNANCE.md`](GOVERNANCE.md).
 
 ## Areas
 

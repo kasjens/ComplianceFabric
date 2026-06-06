@@ -4,9 +4,9 @@ Thanks for your interest in the GxP Compliance Fabric. This project is built in 
 
 ## Before you start
 
-- Read `docs/00-overview.md` and `docs/01-architecture.md` so your change fits the design.
-- Read `GOVERNANCE.md` for how decisions are made and where the open-core boundary sits.
-- Follow `CODE_OF_CONDUCT.md` in all project spaces.
+- Read [`docs/00-overview.md`](docs/00-overview.md) and [`docs/01-architecture.md`](docs/01-architecture.md) so your change fits the design.
+- Read [`GOVERNANCE.md`](GOVERNANCE.md) for how decisions are made and where the open-core boundary sits.
+- Follow [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) in all project spaces.
 
 ## Ways to contribute
 
