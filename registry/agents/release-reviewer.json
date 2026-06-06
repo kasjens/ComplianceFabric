@@ -1,0 +1,9 @@
+{
+  "id": "release-reviewer",
+  "version": "0.1.0",
+  "description": "Reviews release pull requests for change-control compliance before merge.",
+  "model": "claude-opus-4",
+  "owner": "quality@example.com",
+  "prompts": ["change-control-review"],
+  "tools": ["gh-pr-read"]
+}

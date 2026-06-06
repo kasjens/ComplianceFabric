@@ -20,6 +20,12 @@
         "cfr-part-11-10d-access-control",
         "cfr-part-11-10e-audit-trail"
       ]
+    },
+    {
+      "href": "eu-ai-act",
+      "include-controls": [
+        "eu-ai-act-12-record-keeping"
+      ]
     }
   ]
 }

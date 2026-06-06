@@ -29,10 +29,10 @@ The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architec
 - Continuous assessment across the mapped controls. `fabric ledger assess` normalizes the ledger into OSCAL assessment-results, and three producers feed it: change-control from pull requests (`fabric evidence`), Kyverno policy results (`fabric policy-report`), and GitOps drift from Argo CD sync status (`fabric drift`). Remaining is the other sources (image attestations, agent traces) and collecting them continuously rather than on invocation.
 - A posture view of live control coverage. **Done:** `fabric ledger posture` rolls the ledger up per control (latest observed result, observation count, lapses); remaining is the live dashboard surface over it.
 
-## Phase 4: AI agent governance
+## Phase 4: AI agent governance (in progress)
 
-- Agent and prompt/tool registry as versioned artifacts.
-- Gateway policy and interaction tracing.
+- Agent and prompt/tool registry as versioned artifacts. **Done:** the `internal/registry` package models agents, prompts, and tools as versioned artifacts, and `fabric registry validate` checks versioning, agent ownership, reference resolution, and duplicate ids. A starter registry lives under `registry/`.
+- Gateway policy and interaction tracing. **Done (tracing):** `fabric trace` is a fourth evidence producer that judges each gateway interaction against the registry's qualified surface (an undeclared prompt or tool, or an unregistered agent, is off-policy) and keys records to `eu-ai-act-12-record-keeping`, feeding the same ledger. The runtime gateway that enforces policy inline (rather than evaluating its log after the fact) remains.
 - Evaluation gates before promotion.
 
 ## Phase 5: Cross-sector profiles

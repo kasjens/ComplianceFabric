@@ -1,0 +1,14 @@
+{
+  "id": "eu-ai-act",
+  "metadata": {
+    "title": "EU AI Act - High-Risk AI System Requirements",
+    "version": "2024-07-12"
+  },
+  "controls": [
+    {
+      "id": "eu-ai-act-12-record-keeping",
+      "title": "Record-keeping",
+      "statement": "High-risk AI systems shall technically allow for the automatic recording of events (logs) over the lifetime of the system, to a degree appropriate to the intended purpose, ensuring traceability of the system's functioning."
+    }
+  ]
+}

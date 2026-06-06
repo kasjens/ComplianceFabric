@@ -18,6 +18,7 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 	"github.com/kasjens/ComplianceFabric/internal/policies"
 	"github.com/kasjens/ComplianceFabric/internal/posture"
+	"github.com/kasjens/ComplianceFabric/internal/registry"
 	"github.com/kasjens/ComplianceFabric/internal/report"
 	"github.com/kasjens/ComplianceFabric/internal/validate"
 )
@@ -33,7 +34,9 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric evidence <pr-json-file> [control-id] [--ledger <path>]\n" +
 	"       fabric policy-report <report-json-file> <policies-dir> [--ledger <path>]\n" +
 	"       fabric drift <argo-apps-json-file> <control-id> [--ledger <path>]\n" +
-	"       fabric ledger <verify|assess|posture> <ledger-path>"
+	"       fabric trace <traces-json-file> <registry-dir> <control-id> [--ledger <path>]\n" +
+	"       fabric ledger <verify|assess|posture> <ledger-path>\n" +
+	"       fabric registry validate <registry-dir>"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -41,7 +44,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "ledger": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "ledger": true, "registry": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -57,7 +60,7 @@ func run(args []string, out io.Writer) int {
 		switch {
 		case cmd == "assess" && a == "--strict":
 			strict = true
-		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift") && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -106,6 +109,27 @@ func run(args []string, out io.Writer) int {
 			fmt.Fprintln(out, usage)
 			return 2
 		}
+	}
+
+	// trace turns a gateway interaction log into evidence keyed to the given
+	// control, judging each interaction against the agent registry's qualified
+	// surface (the agent's declared prompts and tools).
+	if cmd == "trace" {
+		if len(positional) != 3 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runTrace(positional[0], positional[1], positional[2], ledgerPath, out)
+	}
+
+	// registry validate checks an agent/prompt/tool registry directory for
+	// internal consistency (versions, owners, references, duplicate ids).
+	if cmd == "registry" {
+		if len(positional) != 2 || positional[0] != "validate" {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runRegistryValidate(positional[1], out)
 	}
 
 	// policy-report turns a Kyverno PolicyReport into evidence records keyed to
@@ -329,6 +353,43 @@ func runLedgerPosture(path string, out io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func runTrace(tracesFile, registryDir, controlID, ledgerPath string, out io.Writer) int {
+	data, err := os.ReadFile(tracesFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	reg, err := registry.Load(registryDir)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := evidence.FromAgentTraces(data, reg, controlID)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return emitRecords(records, ledgerPath, out)
+}
+
+func runRegistryValidate(dir string, out io.Writer) int {
+	r, err := registry.Load(dir)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	findings := registry.Validate(r)
+	if len(findings) == 0 {
+		fmt.Fprintln(out, "registry validation passed: no findings")
+		return 0
+	}
+	fmt.Fprintf(out, "%d finding(s):\n", len(findings))
+	for _, f := range findings {
+		fmt.Fprintf(out, "  [%s] %s: %s\n", f.Severity, f.Rule, f.Message)
+	}
+	return 1
 }
 
 func runGenerate(bundle validate.Bundle, policiesDir, outDir string, out io.Writer) int {

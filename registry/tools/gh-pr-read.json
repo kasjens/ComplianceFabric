@@ -1,0 +1,5 @@
+{
+  "id": "gh-pr-read",
+  "version": "0.1.0",
+  "description": "Read-only access to pull-request metadata (author, approvals, merge commit, merge timestamp) via gh pr view --json."
+}

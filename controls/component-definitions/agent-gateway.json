@@ -1,0 +1,34 @@
+{
+  "metadata": {
+    "title": "AI agent gateway governance components",
+    "version": "0.1.0"
+  },
+  "components": [
+    {
+      "title": "agent-gateway",
+      "type": "service",
+      "description": "Gateway that fronts AI agent interactions and records each one as a trace. The trace log is the automatic record of the system's functioning, evaluated against the agent registry's qualified surface.",
+      "props": [
+        { "name": "Rule_Id", "value": "agent-interaction-record-keeping", "remarks": "rule_set_00" },
+        { "name": "Rule_Description", "value": "Every agent interaction is recorded as a trace and judged against the agent's registered prompts and tools.", "remarks": "rule_set_00" },
+        { "name": "Check_Id", "value": "agent-interaction-tracing", "remarks": "rule_set_00" },
+        { "name": "Check_Description", "value": "fabric trace turns the gateway interaction log into evidence, confirming each interaction stayed within the agent's qualified surface in the registry.", "remarks": "rule_set_00" }
+      ],
+      "control-implementations": [
+        {
+          "source": "controls/profiles/pharma-mes-baseline.json",
+          "description": "Automatic record-keeping for AI agent interactions in the pharma MES baseline.",
+          "implemented-requirements": [
+            {
+              "control-id": "eu-ai-act-12-record-keeping",
+              "description": "The gateway automatically records every agent interaction as a trace, giving traceability of the system's functioning over its lifetime.",
+              "props": [
+                { "name": "Rule_Id", "value": "agent-interaction-record-keeping" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

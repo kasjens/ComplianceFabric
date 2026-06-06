@@ -569,3 +569,100 @@ func TestUsageOnBadArgs(t *testing.T) {
 		t.Fatalf("expected exit 2 for missing args, got %d", code)
 	}
 }
+
+func TestRegistryValidateCleanExitsZero(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, filepath.Join(dir, "agents", "a.json"),
+		`{"id":"a","version":"1.0.0","owner":"o","prompts":["p"],"tools":["t"]}`)
+	writeFixture(t, filepath.Join(dir, "prompts", "p.json"),
+		`{"id":"p","version":"1.0.0","text":"hi"}`)
+	writeFixture(t, filepath.Join(dir, "tools", "t.json"),
+		`{"id":"t","version":"1.0.0","description":"a tool"}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"registry", "validate", dir}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for clean registry, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "no findings") {
+		t.Errorf("expected clean-result message, got:\n%s", out.String())
+	}
+}
+
+func TestRegistryValidateReportsFindingsAndExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, filepath.Join(dir, "agents", "a.json"),
+		`{"id":"a","prompts":["ghost"]}`)
+
+	var out bytes.Buffer
+	code := run([]string{"registry", "validate", dir}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for findings, got %d:\n%s", code, out.String())
+	}
+	for _, want := range []string{"missing-version", "missing-owner", "unknown-prompt-ref"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("expected %q in output, got:\n%s", want, out.String())
+		}
+	}
+}
+
+func seedTraceRegistry(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	writeFixture(t, filepath.Join(dir, "agents", "a.json"),
+		`{"id":"release-reviewer","version":"1.0.0","owner":"o","prompts":["review"],"tools":["gh-pr-read"]}`)
+	writeFixture(t, filepath.Join(dir, "prompts", "p.json"),
+		`{"id":"review","version":"1.0.0","text":"hi"}`)
+	writeFixture(t, filepath.Join(dir, "tools", "t.json"),
+		`{"id":"gh-pr-read","version":"1.0.0","description":"reads prs"}`)
+	return dir
+}
+
+func TestTraceConformingInteractionExitsZeroAndAppendsToLedger(t *testing.T) {
+	dir := t.TempDir()
+	tracesFile := filepath.Join(dir, "traces.json")
+	writeFixture(t, tracesFile,
+		`{"traces":[{"id":"t1","agent":"release-reviewer","prompt":"review","tools":["gh-pr-read"],"timestamp":"2026-06-06T09:14:00Z"}]}`)
+	ledgerPath := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	code := run([]string{"trace", tracesFile, seedTraceRegistry(t), "eu-ai-act-12-record-keeping", "--ledger", ledgerPath}, &out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for conforming interaction, got %d:\n%s", code, out.String())
+	}
+	if _, err := os.Stat(ledgerPath); err != nil {
+		t.Errorf("expected ledger written: %v", err)
+	}
+	if vcode := run([]string{"ledger", "verify", ledgerPath}, &bytes.Buffer{}); vcode != 0 {
+		t.Errorf("expected ledger to verify, got exit %d", vcode)
+	}
+}
+
+func TestTraceOffPolicyInteractionExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	tracesFile := filepath.Join(dir, "traces.json")
+	writeFixture(t, tracesFile,
+		`{"traces":[{"id":"t1","agent":"release-reviewer","prompt":"review","tools":["rm-rf"],"timestamp":"2026-06-06T09:14:00Z"}]}`)
+
+	var out bytes.Buffer
+	code := run([]string{"trace", tracesFile, seedTraceRegistry(t), "eu-ai-act-12-record-keeping"}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for off-policy interaction, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestTraceRequiresThreePositionalArgs(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"trace", "only", "two"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
+func TestRegistryRequiresSubcommandAndPath(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"registry", "validate"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing path, got %d", code)
+	}
+	if code := run([]string{"registry", "bogus", "somedir"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for unknown subcommand, got %d", code)
+	}
+}
