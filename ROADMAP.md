@@ -4,36 +4,48 @@ This roadmap shows the order the project plans to build in. It is a direction, n
 
 The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architecture.md), built from the foundation up so each phase produces something usable on its own.
 
+> **Implementation review (2026-06-06).** Phases 0–4 were audited against the committed code, tests, and control data. Ground truth: `go test ./...`, `go vet`, and `gofmt -l` are all clean, the build is stdlib-only (no external dependencies), and `fabric validate`/`assess` pass on the shipped controls. The net-new engine (controls, five evidence producers, ledger, registry, eval gate) is fully implemented and test-covered. Two claims were corrected as overstated: the Sigstore admit path is **not** exercised in CI, and the kind-cluster admission proof is **not** reproducible from the repo (no kind config, e2e script, or signing pipeline is committed — `ci.yml` runs only the Go checks and the `fabric` control commands). The SBOM/SLSA reference pipeline is **not started**. Each phase below carries a dated review note.
+
 ## Phase 0: Documentation and design (done)
 
 - Reference architecture and layer documentation.
 - Architecture decision records for the core choices.
 - Open-core governance and contribution model.
 
+**Review (2026-06-06): complete, verified.** 11 layer docs (`docs/00`–`docs/10`), 7 ADRs (`docs/adr/0001`–`0007`), and the full governance set (LICENSE, NOTICE, GOVERNANCE, CONTRIBUTING, CODE_OF_CONDUCT, SECURITY, MAINTAINERS) are present. The reference architecture diagram (`reference/architecture.drawio`) ships. No gaps.
+
 ## Phase 1: Controls as code and enforcement (done)
 
 - A first GxP OSCAL profile covering an Annex 11 and Part 11 control subset.
 - Policy composition from the profile. An interim native composer (`fabric generate`) fills this role today; it is swappable for Compliance-to-Policy without changing the control data, which already follows the OSCAL rule_set convention C2P expects.
-- Admission enforcement for the mapped controls via the Kyverno policy library, with `fabric.control-id` traceability proven on a kind cluster. Runtime (continuous) enforcement remains.
-- The `fabric assess` command reports control coverage; OSCAL assessment-results output remains.
+- Admission enforcement for the mapped controls via the Kyverno policy library, with `fabric.control-id` traceability. Runtime (continuous) enforcement remains.
+- The `fabric assess` command reports control coverage and emits OSCAL assessment-results.
+
+**Review (2026-06-06): done, with one correction and one caveat.** Verified: the GxP profile validates, `fabric generate` composes the policy set, `fabric policies` confirms `fabric.control-id` traceability across the five-policy library, and `fabric assess --strict` emits OSCAL assessment-results — all run in CI. *Correction:* the prior text said OSCAL assessment-results output "remains"; it is in fact implemented (`internal/assess`), so the line is updated. *Caveat:* the "proven on a kind cluster" claim is not reproducible from the repo — no kind config or e2e script is committed, so the live-admission proof rests on an ephemeral manual run. Traceability itself is proven by the committed tests and CI. Runtime (continuous) enforcement is correctly still open.
 
 ## Phase 2: Trusted delivery and change control (in progress)
 
-- SBOM and SLSA provenance in the reference pipeline.
-- Sigstore signature verification at admission. **Done:** keyless `verify-image-signatures` policy; deny path proven on kind, admit path exercised in CI.
+- SBOM and SLSA provenance in the reference pipeline. **Not started.**
+- Sigstore signature verification at admission. **Partial:** the keyless `verify-image-signatures` Kyverno policy is authored and mapped to `cfr-part-11-10a-system-validation`. No automated cluster proof is committed: CI does not stand up a kind cluster or run cosign, so neither the deny path nor the admit path is exercised in CI.
 - Change-control evidence from GitOps pull-request and merge records. **Done:** the `fabric evidence` command derives an attributable, time-stamped change-control record from a pull request, flags invalid authorizations, and emits an evidence-ledger record keyed to the `annex11-10-change-control` control. Records persist to the append-only ledger via `fabric evidence --ledger`, and `fabric ledger assess` normalizes them into OSCAL assessment-results (see Phase 3).
 
-## Phase 3: Evidence and reporting
+**Review (2026-06-06): genuinely in progress; two items were overstated.** *Change-control evidence is done and verified* (`internal/evidence`, CLI- and unit-tested). *Sigstore* was previously marked "deny path proven on kind, admit path exercised in CI" — corrected above: the policy exists but `ci.yml` runs only Go checks and the `fabric` commands, with no kind cluster and no cosign step, so there is no committed automated signature proof. *SBOM/SLSA* has no implementation — `reference/` holds only the architecture diagram, and no syft/cosign-attest pipeline is committed; it is blocked locally (no cosign/syft) and best done in CI. To close Phase 2: add a CI job (or e2e script) that creates a kind cluster, installs Kyverno, signs a test image with the GitHub Actions OIDC identity, and asserts the admit/deny behaviour; and add the SBOM/SLSA producer.
+
+## Phase 3: Evidence and reporting (in progress)
 
 - An append-only evidence ledger keyed to control identifiers. **Done:** the `internal/ledger` store chains records by hash (tamper-evident, JSON Lines); `fabric evidence --ledger` appends and `fabric ledger verify` checks the chain.
-- Continuous assessment across the mapped controls. `fabric ledger assess` normalizes the ledger into OSCAL assessment-results, and three producers feed it: change-control from pull requests (`fabric evidence`), Kyverno policy results (`fabric policy-report`), and GitOps drift from Argo CD sync status (`fabric drift`). Remaining is the other sources (image attestations, agent traces) and collecting them continuously rather than on invocation.
+- Continuous assessment across the mapped controls. **Done (collection on invocation):** `fabric ledger assess` normalizes the ledger into OSCAL assessment-results, and five producers feed it: change-control from pull requests (`fabric evidence`), Kyverno policy results (`fabric policy-report`), GitOps drift from Argo CD sync status (`fabric drift`), agent interaction traces (`fabric trace`), and agent eval-gate verdicts (`fabric eval-gate`). Remaining is the image-attestation source, and collecting evidence continuously rather than on invocation.
 - A posture view of live control coverage. **Done:** `fabric ledger posture` rolls the ledger up per control (latest observed result, observation count, lapses); remaining is the live dashboard surface over it.
+
+**Review (2026-06-06): substantially done; the heading and producer list were stale.** Verified: the hash-chained ledger, `fabric ledger verify`/`assess`/`posture`, and all five producers are implemented and test-covered. *Corrections:* the phase now carries an "(in progress)" marker for consistency; the producer count is updated from three to five (agent traces and eval-gate verdicts, both delivered in Phase 4, also feed the Phase 3 ledger); and "agent traces" is removed from the remaining list since `fabric trace` ships. Honestly still open: the image-attestation producer, continuous (vs on-invocation) collection, and a live dashboard surface over the posture rollup.
 
 ## Phase 4: AI agent governance (in progress)
 
 - Agent and prompt/tool registry as versioned artifacts. **Done:** the `internal/registry` package models agents, prompts, and tools as versioned artifacts, and `fabric registry validate` checks versioning, agent ownership, reference resolution, and duplicate ids. A starter registry lives under `registry/`.
 - Gateway policy and interaction tracing. **Done (tracing):** `fabric trace` is a fourth evidence producer that judges each gateway interaction against the registry's qualified surface (an undeclared prompt or tool, or an unregistered agent, is off-policy) and keys records to `eu-ai-act-12-record-keeping`, feeding the same ledger. The runtime gateway that enforces policy inline (rather than evaluating its log after the fact) remains.
 - Evaluation gates before promotion. **Done:** the `internal/eval` package models the promotion gate as authoritative policy (required suites and a failure budget), and `fabric eval-gate` is a fifth evidence producer that records whether a version was cleared to ship, keyed to `eu-ai-act-15-accuracy-robustness`.
+
+**Review (2026-06-06): the implemented (data-and-logic) scope is done and accurate.** Verified: `internal/registry` + `fabric registry validate`, `internal/eval` + `fabric eval-gate`, and the `fabric trace` producer are all implemented and test-covered; the new `eu-ai-act` catalog controls validate and assess satisfied; a starter registry ships under `registry/`. The one open item is correctly stated: the inline runtime gateway that enforces policy at request time (rather than evaluating its interaction log after the fact) — it needs a live gateway and is not reproducible from fixtures, so it is out of scope for the test-first work done here. Minor hardening option: the Phase 4 CLI commands are covered by `go test` but, unlike the Phase 1 commands, are not invoked as dedicated CI steps.
 
 ## Phase 5: Cross-sector profiles
 
