@@ -34,7 +34,7 @@ The minimum shape of an evidence record:
 
 Two outputs sit on top of the ledger:
 
-- A posture dashboard showing live control coverage, current gaps, and trend. This is the day-to-day view for platform and quality teams.
+- A posture dashboard showing live control coverage, current gaps, and trend. This is the day-to-day view for platform and quality teams. `fabric ledger posture <path>` is the first cut: it rolls the ledger up per control to the latest observed result (latest record wins), how many times the control has been observed, and how many of those were lapses, exiting non-zero when any control currently has an open gap. A live dashboard surface over this rollup is still to come.
 - On-demand audit packs generated from the ledger: installation, operational, and performance qualification evidence (IQ/OQ/PQ), the Annex 11 audit trail, Part 11 records, and the EU AI Act technical file for agents. Each pack is assembled from records already collected, not written from scratch.
 
-Because every record is tied to a control, a pack is a query over the ledger, not a manual document-gathering exercise. That is the source of the validation-effort reduction the design targets.
+Because every record is tied to a control, a pack is a query over the ledger, not a manual document-gathering exercise. That is the source of the validation-effort reduction the design targets. The posture rollup is distinct from `fabric report`, which shows design-time coverage (is a control mapped to a policy at all); posture answers what the evidence has actually observed over time.

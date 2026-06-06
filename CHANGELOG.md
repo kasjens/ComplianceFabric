@@ -21,6 +21,7 @@ All notable changes to this project are recorded here. The format follows Keep a
 - Append-only, tamper-evident evidence ledger (`internal/ledger`): records are chained by a SHA-256 hash over the previous hash and the record, persisted as JSON Lines, so any later mutation, deletion, or reordering breaks the chain and is detectable.
 - `fabric evidence ... --ledger <path>` appends the evidence record to a ledger (a flagged change is recorded too; the exit code still reflects findings), and `fabric ledger verify <path>` walks the chain and exits non-zero if it has been tampered with.
 - `fabric ledger assess <path>` normalizes the ledger's evidence records into an OSCAL assessment-results document (one finding per record, control-id and status carried through) — the same model `fabric assess` emits — and exits non-zero when any finding is not-satisfied, so CI can gate on observed evidence.
+- Control-posture rollup (`internal/posture`) and `fabric ledger posture <path>`: for each control, the latest observed result (latest record wins), how many times it has been observed, and how many of those were lapses. This is the day-to-day posture view for platform and quality teams, distinct from the design-time coverage `fabric report` shows; it exits non-zero when any control currently has an open gap.
 
 ### Changed
 

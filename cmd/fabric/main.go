@@ -16,6 +16,7 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/ledger"
 	"github.com/kasjens/ComplianceFabric/internal/loader"
 	"github.com/kasjens/ComplianceFabric/internal/policies"
+	"github.com/kasjens/ComplianceFabric/internal/posture"
 	"github.com/kasjens/ComplianceFabric/internal/report"
 	"github.com/kasjens/ComplianceFabric/internal/validate"
 )
@@ -29,7 +30,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric policies <controls-dir> <policies-dir>\n" +
 	"       fabric generate <controls-dir> <policies-dir> <out-dir>\n" +
 	"       fabric evidence <pr-json-file> [control-id] [--ledger <path>]\n" +
-	"       fabric ledger <verify|assess> <ledger-path>"
+	"       fabric ledger <verify|assess|posture> <ledger-path>"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -96,6 +97,8 @@ func run(args []string, out io.Writer) int {
 			return runLedgerVerify(positional[1], out)
 		case "assess":
 			return runLedgerAssess(positional[1], out)
+		case "posture":
+			return runLedgerPosture(positional[1], out)
 		default:
 			fmt.Fprintln(out, usage)
 			return 2
@@ -198,15 +201,24 @@ func runLedgerVerify(path string, out io.Writer) int {
 	return 0
 }
 
-func runLedgerAssess(path string, out io.Writer) int {
+// ledgerRecords reads a ledger and returns the evidence records it stores.
+func ledgerRecords(path string) ([]evidence.Record, error) {
 	entries, err := ledger.Open(path).Entries()
 	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
-		return 2
+		return nil, err
 	}
 	records := make([]evidence.Record, 0, len(entries))
 	for _, e := range entries {
 		records = append(records, e.Record)
+	}
+	return records, nil
+}
+
+func runLedgerAssess(path string, out io.Writer) int {
+	records, err := ledgerRecords(path)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
 	}
 	results := evidence.AssessmentResults(records)
 	enc := json.NewEncoder(out)
@@ -216,6 +228,20 @@ func runLedgerAssess(path string, out io.Writer) int {
 		return 2
 	}
 	if len(assess.NotSatisfied(results)) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func runLedgerPosture(path string, out io.Writer) int {
+	records, err := ledgerRecords(path)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	p := posture.Summarize(records)
+	fmt.Fprint(out, p.Render())
+	if len(p.NotSatisfied()) > 0 {
 		return 1
 	}
 	return 0

@@ -370,6 +370,49 @@ func TestLedgerAssessEmitsOSCALResults(t *testing.T) {
 	}
 }
 
+func TestLedgerPostureRendersRollup(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 42, "state": "MERGED", "author": {"login": "kasjens"},
+  "mergedAt": "2026-06-05T14:30:00Z", "mergeCommit": {"oid": "32fa9af"},
+  "reviews": [{"author": {"login": "rev"}, "state": "APPROVED"}]
+}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+	if code := run([]string{"evidence", pr, "annex11-10-change-control", "--ledger", led}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("append failed: %d", code)
+	}
+
+	var out bytes.Buffer
+	if code := run([]string{"ledger", "posture", led}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for an all-satisfied posture, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "annex11-10-change-control") {
+		t.Errorf("posture missing the control:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "currently satisfied") {
+		t.Errorf("posture missing the summary line:\n%s", out.String())
+	}
+}
+
+func TestLedgerPostureExitsNonZeroOnOpenGap(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 7, "state": "OPEN", "author": {"login": "kasjens"},
+  "mergedAt": null, "mergeCommit": null, "reviews": []
+}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+	if code := run([]string{"evidence", pr, "annex11-10-change-control", "--ledger", led}, &bytes.Buffer{}); code != 1 {
+		t.Fatalf("expected exit 1 recording a flagged change, got %d", code)
+	}
+
+	var out bytes.Buffer
+	if code := run([]string{"ledger", "posture", led}, &out); code != 1 {
+		t.Fatalf("expected exit 1 when a control has an open gap, got %d:\n%s", code, out.String())
+	}
+}
+
 func TestLedgerAssessExitsNonZeroOnNotSatisfied(t *testing.T) {
 	dir := t.TempDir()
 	pr := filepath.Join(dir, "pr.json")
