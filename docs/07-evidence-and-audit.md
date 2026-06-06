@@ -26,6 +26,8 @@ The minimum shape of an evidence record:
 }
 ```
 
+**Implementation status:** the first producer of these records is `fabric evidence`, which keys a GitOps change-control record to `annex11-10-change-control` (`control-id`, `subject`, `result`, `observed-at`, `source`, with the pull request embedded as the raw evidence). Records are emitted to stdout today; the append-only ledger that retains them is Phase 3 work.
+
 ## Reporting
 
 Two outputs sit on top of the ledger:
