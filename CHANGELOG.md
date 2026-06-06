@@ -7,6 +7,6 @@ All notable changes to this project are recorded here. The format follows Keep a
 ### Added
 
 - Reference architecture and layer documentation (`docs/00` through `docs/10`).
-- Architecture decision records 0001 through 0004.
+- Architecture decision records 0001 through 0007, covering OSCAL, Kyverno, Sigstore, the open-core model, GitOps change control, Open Cluster Management, and the AI/MCP gateway.
 - Reference architecture diagram (`reference/architecture.drawio`).
 - Open-core project setup: license, notice, governance, contribution guide, code of conduct, security policy, roadmap, maintainers, and GitHub issue and pull-request templates.
