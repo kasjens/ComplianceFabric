@@ -169,6 +169,49 @@ func TestGenerateRequiresThreeArgs(t *testing.T) {
 	}
 }
 
+func TestEvidenceValidChangeExitsZero(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 42, "state": "MERGED", "author": {"login": "kasjens"},
+  "mergedAt": "2026-06-05T14:30:00Z", "mergeCommit": {"oid": "32fa9af"},
+  "reviews": [{"author": {"login": "rev"}, "state": "APPROVED"}]
+}`)
+
+	var out bytes.Buffer
+	code := run([]string{"evidence", pr}, &out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for a valid authorized change, got %d. output:\n%s", code, out.String())
+	}
+	for _, want := range []string{"kasjens", "32fa9af"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("evidence output missing %q:\n%s", want, out.String())
+		}
+	}
+}
+
+func TestEvidenceFlagsInvalidChangeAndExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{"number": 7, "state": "OPEN", "author": {"login": "kasjens"}, "reviews": []}`)
+
+	var out bytes.Buffer
+	code := run([]string{"evidence", pr}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 for an unmerged, unapproved change, got %d", code)
+	}
+	if !strings.Contains(out.String(), "no approval") {
+		t.Errorf("expected a no-approval finding, got:\n%s", out.String())
+	}
+}
+
+func TestEvidenceRequiresOneArg(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"evidence"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing evidence arg, got %d", code)
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {

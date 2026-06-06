@@ -1,5 +1,7 @@
-// Command fabric is the CLI for the Compliance Fabric. Today it validates a
-// controls/ directory of OSCAL documents for internal consistency.
+// Command fabric is the CLI for the Compliance Fabric. It validates and reports
+// on a controls/ directory of OSCAL documents, assesses control coverage,
+// verifies and composes the Kyverno policy library, and derives change-control
+// evidence from GitOps pull-request records.
 package main
 
 import (
@@ -9,6 +11,7 @@ import (
 	"os"
 
 	"github.com/kasjens/ComplianceFabric/internal/assess"
+	"github.com/kasjens/ComplianceFabric/internal/evidence"
 	"github.com/kasjens/ComplianceFabric/internal/generate"
 	"github.com/kasjens/ComplianceFabric/internal/loader"
 	"github.com/kasjens/ComplianceFabric/internal/policies"
@@ -23,7 +26,8 @@ func main() {
 const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric assess [--strict] <controls-dir>\n" +
 	"       fabric policies <controls-dir> <policies-dir>\n" +
-	"       fabric generate <controls-dir> <policies-dir> <out-dir>"
+	"       fabric generate <controls-dir> <policies-dir> <out-dir>\n" +
+	"       fabric evidence <pr-json-file>"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -31,7 +35,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -61,6 +65,11 @@ func run(args []string, out io.Writer) int {
 		return 2
 	}
 
+	// evidence operates on a pull-request JSON file, not a controls directory.
+	if cmd == "evidence" {
+		return runEvidence(positional[0], out)
+	}
+
 	bundle, err := loader.Load(positional[0])
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
@@ -81,6 +90,34 @@ func run(args []string, out io.Writer) int {
 		return runGenerate(bundle, positional[1], positional[2], out)
 	}
 	return 2
+}
+
+func runEvidence(prFile string, out io.Writer) int {
+	data, err := os.ReadFile(prFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	rec, err := evidence.Extract(data)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	fmt.Fprintf(out, "PR #%d by %s\n", rec.Number, rec.Author)
+	fmt.Fprintf(out, "  merge commit: %s\n", rec.MergeCommit)
+	fmt.Fprintf(out, "  merged at:    %s\n", rec.MergedAt.Format("2006-01-02T15:04:05Z07:00"))
+	fmt.Fprintf(out, "  approvers:    %v\n", rec.Approvers)
+
+	issues := rec.Issues()
+	if len(issues) == 0 {
+		fmt.Fprintln(out, "valid authorized change: no findings")
+		return 0
+	}
+	fmt.Fprintf(out, "%d finding(s):\n", len(issues))
+	for _, msg := range issues {
+		fmt.Fprintf(out, "  [error] change-control: %s\n", msg)
+	}
+	return 1
 }
 
 func runGenerate(bundle validate.Bundle, policiesDir, outDir string, out io.Writer) int {
