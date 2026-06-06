@@ -1,0 +1,28 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: restrict-anonymous-access
+  annotations:
+    fabric.control-id: cfr-part-11-10d-access-control
+    policies.kyverno.io/title: Restrict anonymous access
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: no-anonymous-subjects
+      match:
+        any:
+          - resources:
+              kinds:
+                - RoleBinding
+                - ClusterRoleBinding
+      validate:
+        message: "Binding subjects to anonymous or unauthenticated identities is not permitted (limit system access to authorized individuals)."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.subjects[].name || `[]` }}"
+                operator: AnyIn
+                value:
+                  - system:anonymous
+                  - system:unauthenticated

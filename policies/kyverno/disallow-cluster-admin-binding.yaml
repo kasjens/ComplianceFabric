@@ -1,0 +1,26 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: disallow-cluster-admin-binding
+  annotations:
+    fabric.control-id: annex11-12-1-access-control
+    policies.kyverno.io/title: Disallow binding to cluster-admin
+spec:
+  validationFailureAction: Enforce
+  background: false
+  rules:
+    - name: no-cluster-admin-binding
+      match:
+        any:
+          - resources:
+              kinds:
+                - RoleBinding
+                - ClusterRoleBinding
+      validate:
+        message: "Binding to the cluster-admin role is not permitted (least-privilege access control)."
+        deny:
+          conditions:
+            any:
+              - key: "{{ request.object.roleRef.name }}"
+                operator: Equals
+                value: cluster-admin

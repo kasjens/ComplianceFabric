@@ -37,3 +37,9 @@ jobs:
 
       - name: Validate controls
         run: go run ./cmd/fabric validate controls
+
+      - name: Assess control coverage
+        run: go run ./cmd/fabric assess --strict controls
+
+      - name: Verify policy library traceability
+        run: go run ./cmd/fabric policies controls policies

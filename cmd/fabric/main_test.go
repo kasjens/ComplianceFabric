@@ -87,6 +87,62 @@ func TestAssessEmitsValidOSCALJSON(t *testing.T) {
 	}
 }
 
+func TestAssessStrictExitsNonZeroOnGaps(t *testing.T) {
+	dir := t.TempDir()
+	writeFixture(t, filepath.Join(dir, "catalogs", "c.json"),
+		`{"id":"x","controls":[{"id":"a","title":"A"}]}`)
+	writeFixture(t, filepath.Join(dir, "profiles", "p.json"),
+		`{"imports":[{"href":"x","include-controls":["a"]}]}`)
+
+	var out bytes.Buffer
+	code := run([]string{"assess", "--strict", dir}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 when in-scope control is unenforced, got %d", code)
+	}
+	if !json.Valid(out.Bytes()) {
+		t.Errorf("strict assess should still emit valid JSON:\n%s", out.String())
+	}
+}
+
+func TestAssessStrictExitsZeroWhenAllSatisfied(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"assess", "--strict", repoControlsDir(t)}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for fully-covered controls, got %d:\n%s", code, out.String())
+	}
+}
+
+// repoDir resolves <repo>/<name> from this test file's location.
+func repoDir(t *testing.T, name string) string {
+	t.Helper()
+	_, thisFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("cannot resolve caller path")
+	}
+	return filepath.Join(filepath.Dir(thisFile), "..", "..", name)
+}
+
+func TestPoliciesPassesForShippedLibrary(t *testing.T) {
+	var out bytes.Buffer
+	code := run([]string{"policies", repoControlsDir(t), repoDir(t, "policies")}, &out)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for the shipped policy library, got %d. output:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "no findings") {
+		t.Errorf("expected a clean-result message, got:\n%s", out.String())
+	}
+}
+
+func TestPoliciesReportsMissingPolicyAndExitsNonZero(t *testing.T) {
+	var out bytes.Buffer
+	code := run([]string{"policies", repoControlsDir(t), t.TempDir()}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 when policy files are absent, got %d", code)
+	}
+	if !strings.Contains(out.String(), "missing-policy") {
+		t.Errorf("expected missing-policy in output, got:\n%s", out.String())
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {

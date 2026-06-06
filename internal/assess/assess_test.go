@@ -72,6 +72,16 @@ func TestAssessMarksCoveredControlSatisfied(t *testing.T) {
 	}
 }
 
+func TestNotSatisfiedReturnsOnlyGaps(t *testing.T) {
+	gaps := NotSatisfied(Assess(bundle()))
+	if len(gaps) != 1 {
+		t.Fatalf("gaps = %d, want 1: %+v", len(gaps), gaps)
+	}
+	if gaps[0].ControlID != "annex11-12-1-access-control" {
+		t.Errorf("gap ControlID = %q, want %q", gaps[0].ControlID, "annex11-12-1-access-control")
+	}
+}
+
 func TestAssessMarksUncoveredSelectedControlNotSatisfied(t *testing.T) {
 	f, ok := findingFor(t, Assess(bundle()), "annex11-12-1-access-control")
 	if !ok {

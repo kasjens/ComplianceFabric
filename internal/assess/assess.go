@@ -44,3 +44,17 @@ func Assess(b validate.Bundle) oscal.AssessmentResults {
 		}},
 	}
 }
+
+// NotSatisfied returns the findings whose status is not "satisfied" - the
+// in-scope controls with no enforcement behind them.
+func NotSatisfied(ar oscal.AssessmentResults) []oscal.AssessmentFinding {
+	var gaps []oscal.AssessmentFinding
+	for _, r := range ar.Results {
+		for _, f := range r.Findings {
+			if f.Status != oscal.StatusSatisfied {
+				gaps = append(gaps, f)
+			}
+		}
+	}
+	return gaps
+}

@@ -1,0 +1,23 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: require-audit-logging-annotations
+  annotations:
+    fabric.control-id: "annex11-9-audit-trail,cfr-part-11-10e-audit-trail"
+    policies.kyverno.io/title: Require audit-logging annotation
+spec:
+  validationFailureAction: Enforce
+  background: true
+  rules:
+    - name: require-audit-annotation
+      match:
+        any:
+          - resources:
+              kinds:
+                - Pod
+      validate:
+        message: "Pods must carry the gxp.compliancefabric.io/audit-logging annotation so actions are recorded to the audit trail."
+        pattern:
+          metadata:
+            annotations:
+              gxp.compliancefabric.io/audit-logging: "?*"
