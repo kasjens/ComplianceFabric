@@ -40,8 +40,24 @@ func Run(b Bundle) []Finding {
 	findings = append(findings, checkMappingControlsResolve(b)...)
 	findings = append(findings, checkNoDuplicateControlIDs(b)...)
 	findings = append(findings, checkProfileCoverage(b)...)
-	findings = append(findings, checkMappingBindings(b)...)
+	findings = append(findings, checkRuleReferences(b)...)
 	return findings
+}
+
+// mappedControlIDs returns every control addressed by some component's
+// implemented-requirements, regardless of whether its rules resolve.
+func mappedControlIDs(b Bundle) map[string]bool {
+	mapped := make(map[string]bool)
+	for _, cd := range b.ComponentDefinitions {
+		for _, comp := range cd.Components {
+			for _, ci := range comp.ControlImplementations {
+				for _, req := range ci.ImplementedRequirements {
+					mapped[req.ControlID] = true
+				}
+			}
+		}
+	}
+	return mapped
 }
 
 // checkNoDuplicateControlIDs flags a control ID that appears more than once
@@ -71,12 +87,7 @@ func checkNoDuplicateControlIDs(b Bundle) []Finding {
 // definition maps to a policy. An uncovered control is authored intent with no
 // enforcement behind it.
 func checkProfileCoverage(b Bundle) []Finding {
-	mapped := make(map[string]bool)
-	for _, cd := range b.ComponentDefinitions {
-		for _, m := range cd.Mappings {
-			mapped[m.ControlID] = true
-		}
-	}
+	mapped := mappedControlIDs(b)
 
 	var findings []Finding
 	for _, prof := range b.Profiles {
@@ -96,30 +107,28 @@ func checkProfileCoverage(b Bundle) []Finding {
 	return findings
 }
 
-// checkMappingBindings flags mappings with no implementations and any
-// implementation missing a component or policy ID.
-func checkMappingBindings(b Bundle) []Finding {
+// checkRuleReferences flags control requirements that reference a rule the
+// component does not define (unresolved-rule), and rule sets that define a rule
+// but no automated check to enforce it (rule-missing-check).
+func checkRuleReferences(b Bundle) []Finding {
 	var findings []Finding
 	for _, cd := range b.ComponentDefinitions {
-		for _, m := range cd.Mappings {
-			if len(m.ImplementedBy) == 0 {
+		for _, ref := range cd.UnresolvedRules() {
+			findings = append(findings, Finding{
+				Rule:      "unresolved-rule",
+				Severity:  Error,
+				ControlID: ref.ControlID,
+				Message:   "control " + ref.ControlID + " references rule " + ref.RuleID + " not defined by component " + ref.Component,
+			})
+		}
+		for _, cp := range cd.ControlPolicies() {
+			if cp.PolicyID == "" {
 				findings = append(findings, Finding{
-					Rule:      "empty-mapping",
+					Rule:      "rule-missing-check",
 					Severity:  Error,
-					ControlID: m.ControlID,
-					Message:   "control " + m.ControlID + " has a mapping with no implementations",
+					ControlID: cp.ControlID,
+					Message:   "control " + cp.ControlID + " maps to a rule in component " + cp.Component + " that has no check",
 				})
-				continue
-			}
-			for _, impl := range m.ImplementedBy {
-				if impl.Component == "" || impl.PolicyID == "" {
-					findings = append(findings, Finding{
-						Rule:      "incomplete-binding",
-						Severity:  Error,
-						ControlID: m.ControlID,
-						Message:   "control " + m.ControlID + " has an implementation missing a component or policy-id",
-					})
-				}
 			}
 		}
 	}
@@ -142,16 +151,14 @@ func allControlIDs(b Bundle) map[string]bool {
 func checkMappingControlsResolve(b Bundle) []Finding {
 	known := allControlIDs(b)
 	var findings []Finding
-	for _, cd := range b.ComponentDefinitions {
-		for _, m := range cd.Mappings {
-			if !known[m.ControlID] {
-				findings = append(findings, Finding{
-					Rule:      "unmapped-control",
-					Severity:  Error,
-					ControlID: m.ControlID,
-					Message:   "component definition maps control " + m.ControlID + " not defined in any catalog",
-				})
-			}
+	for id := range mappedControlIDs(b) {
+		if !known[id] {
+			findings = append(findings, Finding{
+				Rule:      "unmapped-control",
+				Severity:  Error,
+				ControlID: id,
+				Message:   "component definition maps control " + id + " not defined in any catalog",
+			})
 		}
 	}
 	return findings

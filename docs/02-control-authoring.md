@@ -39,15 +39,27 @@ controls/
 
 ## Control to policy mapping
 
-A component definition names the controls a component satisfies and the policy identifiers that implement them. Compliance-to-Policy reads it and generates the policy for each engine. The shape of a mapping entry:
+A component definition follows the OSCAL rule_set convention that Compliance-to-Policy consumes. A component declares its rules as grouped props — each rule set pairs a `Rule_Id` (the abstract rule) with a `Check_Id` (the automated check that enforces it, which for Kyverno is the policy name) — and each `implemented-requirement` binds a control to one or more rules by `Rule_Id`. C2P reads this and generates the policy for each engine. The shape:
 
 ```json
 {
-  "control-id": "annex11-9-audit-trail",
-  "description": "System generates a secure, time-stamped audit trail.",
-  "implemented-by": [
-    { "component": "platform-logging", "policy-id": "require-audit-logging" },
-    { "component": "evidence-ledger", "policy-id": "append-only-storage" }
+  "title": "kyverno",
+  "type": "validation",
+  "props": [
+    { "name": "Rule_Id", "value": "audit-logging-annotation", "remarks": "rule_set_00" },
+    { "name": "Check_Id", "value": "require-audit-logging-annotations", "remarks": "rule_set_00" }
+  ],
+  "control-implementations": [
+    {
+      "source": "controls/profiles/pharma-mes-baseline.json",
+      "implemented-requirements": [
+        {
+          "control-id": "annex11-9-audit-trail",
+          "description": "System generates a secure, time-stamped audit trail.",
+          "props": [{ "name": "Rule_Id", "value": "audit-logging-annotation" }]
+        }
+      ]
+    }
   ]
 }
 ```

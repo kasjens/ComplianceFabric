@@ -24,13 +24,34 @@ func sampleBundle() validate.Bundle {
 			}},
 		}},
 		ComponentDefinitions: []oscal.ComponentDefinition{{
-			Mappings: []oscal.Mapping{{
-				ControlID: "annex11-9-audit-trail",
-				ImplementedBy: []oscal.Implementation{
-					{Component: "kyverno", PolicyID: "require-audit-logging-annotations"},
-					{Component: "evidence-ledger", PolicyID: "append-only-storage"},
+			Components: []oscal.Component{
+				{
+					Title: "kyverno",
+					Props: []oscal.Prop{
+						{Name: "Rule_Id", Value: "audit-logging-annotation", Remarks: "rule_set_00"},
+						{Name: "Check_Id", Value: "require-audit-logging-annotations", Remarks: "rule_set_00"},
+					},
+					ControlImplementations: []oscal.ControlImplementation{{
+						ImplementedRequirements: []oscal.ImplementedRequirement{{
+							ControlID: "annex11-9-audit-trail",
+							Props:     []oscal.Prop{{Name: "Rule_Id", Value: "audit-logging-annotation"}},
+						}},
+					}},
 				},
-			}},
+				{
+					Title: "evidence-ledger",
+					Props: []oscal.Prop{
+						{Name: "Rule_Id", Value: "append-only-evidence", Remarks: "rule_set_00"},
+						{Name: "Check_Id", Value: "append-only-storage", Remarks: "rule_set_00"},
+					},
+					ControlImplementations: []oscal.ControlImplementation{{
+						ImplementedRequirements: []oscal.ImplementedRequirement{{
+							ControlID: "annex11-9-audit-trail",
+							Props:     []oscal.Prop{{Name: "Rule_Id", Value: "append-only-evidence"}},
+						}},
+					}},
+				},
+			},
 		}},
 	}
 }

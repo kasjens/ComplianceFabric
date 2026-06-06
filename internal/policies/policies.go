@@ -39,30 +39,28 @@ func ExtractControlIDs(doc []byte) []string {
 func Verify(b validate.Bundle, policiesDir string) []validate.Finding {
 	var findings []validate.Finding
 	for _, cd := range b.ComponentDefinitions {
-		for _, m := range cd.Mappings {
-			for _, impl := range m.ImplementedBy {
-				if impl.Component != "kyverno" {
-					continue
-				}
-				path := filepath.Join(policiesDir, "kyverno", impl.PolicyID+".yaml")
-				doc, err := os.ReadFile(path)
-				if err != nil {
-					findings = append(findings, validate.Finding{
-						Rule:      "missing-policy",
-						Severity:  validate.Error,
-						ControlID: m.ControlID,
-						Message:   "no Kyverno policy file at " + path + " for policy " + impl.PolicyID,
-					})
-					continue
-				}
-				if !contains(ExtractControlIDs(doc), m.ControlID) {
-					findings = append(findings, validate.Finding{
-						Rule:      "policy-control-id-mismatch",
-						Severity:  validate.Error,
-						ControlID: m.ControlID,
-						Message:   "policy " + impl.PolicyID + " does not annotate control " + m.ControlID,
-					})
-				}
+		for _, cp := range cd.ControlPolicies() {
+			if cp.Component != "kyverno" || cp.PolicyID == "" {
+				continue
+			}
+			path := filepath.Join(policiesDir, "kyverno", cp.PolicyID+".yaml")
+			doc, err := os.ReadFile(path)
+			if err != nil {
+				findings = append(findings, validate.Finding{
+					Rule:      "missing-policy",
+					Severity:  validate.Error,
+					ControlID: cp.ControlID,
+					Message:   "no Kyverno policy file at " + path + " for policy " + cp.PolicyID,
+				})
+				continue
+			}
+			if !contains(ExtractControlIDs(doc), cp.ControlID) {
+				findings = append(findings, validate.Finding{
+					Rule:      "policy-control-id-mismatch",
+					Severity:  validate.Error,
+					ControlID: cp.ControlID,
+					Message:   "policy " + cp.PolicyID + " does not annotate control " + cp.ControlID,
+				})
 			}
 		}
 	}

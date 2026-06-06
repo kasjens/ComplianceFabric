@@ -1,38 +1,103 @@
 {
   "metadata": {
-    "title": "Kyverno enforcement mappings",
-    "version": "0.1.0"
+    "title": "Pharma MES enforcement components",
+    "version": "0.2.0"
   },
-  "mappings": [
+  "components": [
     {
-      "control-id": "annex11-12-1-access-control",
-      "description": "Restrict cluster access to authorised workloads via least-privilege admission policy.",
-      "implemented-by": [
-        { "component": "kyverno", "policy-id": "disallow-cluster-admin-binding" },
-        { "component": "kyverno", "policy-id": "require-run-as-non-root" }
+      "title": "kyverno",
+      "type": "validation",
+      "description": "Kyverno admission and background policies enforcing the mapped controls.",
+      "props": [
+        { "name": "Rule_Id", "value": "least-privilege-rbac", "remarks": "rule_set_00" },
+        { "name": "Rule_Description", "value": "Cluster role bindings must not grant cluster-admin.", "remarks": "rule_set_00" },
+        { "name": "Check_Id", "value": "disallow-cluster-admin-binding", "remarks": "rule_set_00" },
+        { "name": "Check_Description", "value": "Deny RoleBinding/ClusterRoleBinding to the cluster-admin role.", "remarks": "rule_set_00" },
+
+        { "name": "Rule_Id", "value": "run-as-non-root", "remarks": "rule_set_01" },
+        { "name": "Rule_Description", "value": "Workloads must run as a non-root user.", "remarks": "rule_set_01" },
+        { "name": "Check_Id", "value": "require-run-as-non-root", "remarks": "rule_set_01" },
+        { "name": "Check_Description", "value": "Require spec.securityContext.runAsNonRoot=true on Pods.", "remarks": "rule_set_01" },
+
+        { "name": "Rule_Id", "value": "no-anonymous-access", "remarks": "rule_set_02" },
+        { "name": "Rule_Description", "value": "Anonymous and unauthenticated subjects must not be bound to roles.", "remarks": "rule_set_02" },
+        { "name": "Check_Id", "value": "restrict-anonymous-access", "remarks": "rule_set_02" },
+        { "name": "Check_Description", "value": "Deny bindings whose subjects include system:anonymous or system:unauthenticated.", "remarks": "rule_set_02" },
+
+        { "name": "Rule_Id", "value": "audit-logging-annotation", "remarks": "rule_set_03" },
+        { "name": "Rule_Description", "value": "Workloads must declare an audit-logging annotation so actions reach the audit trail.", "remarks": "rule_set_03" },
+        { "name": "Check_Id", "value": "require-audit-logging-annotations", "remarks": "rule_set_03" },
+        { "name": "Check_Description", "value": "Require the gxp.compliancefabric.io/audit-logging annotation on Pods.", "remarks": "rule_set_03" }
+      ],
+      "control-implementations": [
+        {
+          "source": "controls/profiles/pharma-mes-baseline.json",
+          "description": "Kyverno enforcement for the pharma MES baseline.",
+          "implemented-requirements": [
+            {
+              "control-id": "annex11-12-1-access-control",
+              "description": "Restrict cluster access to authorised workloads via least-privilege admission policy.",
+              "props": [
+                { "name": "Rule_Id", "value": "least-privilege-rbac" },
+                { "name": "Rule_Id", "value": "run-as-non-root" }
+              ]
+            },
+            {
+              "control-id": "cfr-part-11-10d-access-control",
+              "description": "Block anonymous and unauthenticated access at admission.",
+              "props": [
+                { "name": "Rule_Id", "value": "no-anonymous-access" }
+              ]
+            },
+            {
+              "control-id": "annex11-9-audit-trail",
+              "description": "Require workloads to emit GMP-relevant change records to the platform audit pipeline.",
+              "props": [
+                { "name": "Rule_Id", "value": "audit-logging-annotation" }
+              ]
+            },
+            {
+              "control-id": "cfr-part-11-10e-audit-trail",
+              "description": "Ensure secure, time-stamped audit trails are produced and retained immutably.",
+              "props": [
+                { "name": "Rule_Id", "value": "audit-logging-annotation" }
+              ]
+            }
+          ]
+        }
       ]
     },
     {
-      "control-id": "cfr-part-11-10d-access-control",
-      "description": "Block anonymous and unauthenticated access at admission.",
-      "implemented-by": [
-        { "component": "kyverno", "policy-id": "restrict-anonymous-access" }
-      ]
-    },
-    {
-      "control-id": "annex11-9-audit-trail",
-      "description": "Require workloads to emit GMP-relevant change records to the platform audit pipeline.",
-      "implemented-by": [
-        { "component": "kyverno", "policy-id": "require-audit-logging-annotations" },
-        { "component": "evidence-ledger", "policy-id": "append-only-storage" }
-      ]
-    },
-    {
-      "control-id": "cfr-part-11-10e-audit-trail",
-      "description": "Ensure secure, time-stamped audit trails are produced and retained immutably.",
-      "implemented-by": [
-        { "component": "kyverno", "policy-id": "require-audit-logging-annotations" },
-        { "component": "evidence-ledger", "policy-id": "append-only-storage" }
+      "title": "evidence-ledger",
+      "type": "service",
+      "description": "Append-only evidence store retaining audit records keyed to control identifiers.",
+      "props": [
+        { "name": "Rule_Id", "value": "append-only-evidence", "remarks": "rule_set_00" },
+        { "name": "Rule_Description", "value": "Audit records must be retained in append-only, immutable storage.", "remarks": "rule_set_00" },
+        { "name": "Check_Id", "value": "append-only-storage", "remarks": "rule_set_00" },
+        { "name": "Check_Description", "value": "Evidence ledger rejects mutation or deletion of stored records.", "remarks": "rule_set_00" }
+      ],
+      "control-implementations": [
+        {
+          "source": "controls/profiles/pharma-mes-baseline.json",
+          "description": "Evidence retention for the pharma MES baseline.",
+          "implemented-requirements": [
+            {
+              "control-id": "annex11-9-audit-trail",
+              "description": "Retain audit-trail records immutably.",
+              "props": [
+                { "name": "Rule_Id", "value": "append-only-evidence" }
+              ]
+            },
+            {
+              "control-id": "cfr-part-11-10e-audit-trail",
+              "description": "Retain time-stamped audit trails immutably.",
+              "props": [
+                { "name": "Rule_Id", "value": "append-only-evidence" }
+              ]
+            }
+          ]
+        }
       ]
     }
   ]

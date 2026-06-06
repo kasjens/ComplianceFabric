@@ -33,10 +33,8 @@ func Coverage(b validate.Bundle) []ControlCoverage {
 
 	policies := make(map[string][]string)
 	for _, cd := range b.ComponentDefinitions {
-		for _, m := range cd.Mappings {
-			for _, impl := range m.ImplementedBy {
-				policies[m.ControlID] = append(policies[m.ControlID], impl.PolicyID)
-			}
+		for _, cp := range cd.ControlPolicies() {
+			policies[cp.ControlID] = append(policies[cp.ControlID], cp.PolicyID)
 		}
 	}
 

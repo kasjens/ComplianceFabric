@@ -50,9 +50,18 @@ func writePolicy(t *testing.T, dir, policyID, controlIDAnnotation string) {
 func bundleMapping(controlID, policyID, component string) validate.Bundle {
 	return validate.Bundle{
 		ComponentDefinitions: []oscal.ComponentDefinition{{
-			Mappings: []oscal.Mapping{{
-				ControlID:     controlID,
-				ImplementedBy: []oscal.Implementation{{Component: component, PolicyID: policyID}},
+			Components: []oscal.Component{{
+				Title: component,
+				Props: []oscal.Prop{
+					{Name: "Rule_Id", Value: "r", Remarks: "rule_set_00"},
+					{Name: "Check_Id", Value: policyID, Remarks: "rule_set_00"},
+				},
+				ControlImplementations: []oscal.ControlImplementation{{
+					ImplementedRequirements: []oscal.ImplementedRequirement{{
+						ControlID: controlID,
+						Props:     []oscal.Prop{{Name: "Rule_Id", Value: "r"}},
+					}},
+				}},
 			}},
 		}},
 	}

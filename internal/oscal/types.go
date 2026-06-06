@@ -39,24 +39,147 @@ type Import struct {
 	IncludeControls []string `json:"include-controls"`
 }
 
-// ComponentDefinition maps controls to the technical policies that implement them.
+// ComponentDefinition describes the components that implement controls. It
+// follows the OSCAL rule_set convention used by Compliance-to-Policy: a
+// component declares rules as grouped props, and each implemented-requirement
+// references those rules by Rule_Id. This lets the same source feed C2P later
+// without reshaping.
 type ComponentDefinition struct {
-	Metadata Metadata  `json:"metadata"`
-	Mappings []Mapping `json:"mappings"`
+	Metadata   Metadata    `json:"metadata"`
+	Components []Component `json:"components"`
 }
 
-// Mapping ties one control to the policies that satisfy it. The shape mirrors
-// the example in docs/02-control-authoring.md.
-type Mapping struct {
-	ControlID     string           `json:"control-id"`
-	Description   string           `json:"description"`
-	ImplementedBy []Implementation `json:"implemented-by"`
+// Component is one technical component (for example the Kyverno engine). Its
+// Title is the component name the rest of the Fabric matches on. Props carry
+// rule_set definitions; ControlImplementations bind controls to those rules.
+type Component struct {
+	Title                  string                  `json:"title"`
+	Type                   string                  `json:"type,omitempty"`
+	Description            string                  `json:"description,omitempty"`
+	Props                  []Prop                  `json:"props,omitempty"`
+	ControlImplementations []ControlImplementation `json:"control-implementations"`
 }
 
-// Implementation names a component and the policy identifier within it.
-type Implementation struct {
-	Component string `json:"component"`
-	PolicyID  string `json:"policy-id"`
+// Prop is an OSCAL property. Rule sets are expressed as props sharing a Remarks
+// group key (for example "rule_set_00") with names Rule_Id, Rule_Description,
+// Check_Id, and Check_Description.
+type Prop struct {
+	Name    string `json:"name"`
+	Value   string `json:"value"`
+	Class   string `json:"class,omitempty"`
+	Remarks string `json:"remarks,omitempty"`
+}
+
+// ControlImplementation binds a set of controls (from Source) to the rules a
+// component provides.
+type ControlImplementation struct {
+	Source                  string                   `json:"source"`
+	Description             string                   `json:"description,omitempty"`
+	ImplementedRequirements []ImplementedRequirement `json:"implemented-requirements"`
+}
+
+// ImplementedRequirement states that a control is satisfied by one or more
+// rules, named via Rule_Id props.
+type ImplementedRequirement struct {
+	ControlID   string `json:"control-id"`
+	Description string `json:"description,omitempty"`
+	Props       []Prop `json:"props,omitempty"`
+}
+
+// ControlPolicy is the resolved (control, component, check) triple the rest of
+// the engine enforces against, after following each Rule_Id to its Check_Id.
+type ControlPolicy struct {
+	ControlID string
+	Component string
+	PolicyID  string
+}
+
+// RuleRef identifies a Rule_Id referenced by a control's implemented-requirement.
+type RuleRef struct {
+	ControlID string
+	Component string
+	RuleID    string
+}
+
+// ruleChecks maps each Rule_Id declared on the component to its Check_Id, by
+// grouping props on their shared Remarks (rule_set) key. A rule set without a
+// Check_Id yields an empty string so callers can flag it.
+func (c Component) ruleChecks() map[string]string {
+	groupRule := map[string]string{}
+	groupCheck := map[string]string{}
+	for _, p := range c.Props {
+		switch p.Name {
+		case "Rule_Id":
+			groupRule[p.Remarks] = p.Value
+		case "Check_Id":
+			groupCheck[p.Remarks] = p.Value
+		}
+	}
+	checks := map[string]string{}
+	for group, rule := range groupRule {
+		checks[rule] = groupCheck[group]
+	}
+	return checks
+}
+
+// ControlPolicies resolves every control's Rule_Id references down to the
+// concrete check (policy) that enforces it. References to a known rule with no
+// Check_Id produce a triple with an empty PolicyID; references to an unknown
+// rule are omitted here and surfaced by UnresolvedRules.
+func (cd ComponentDefinition) ControlPolicies() []ControlPolicy {
+	var out []ControlPolicy
+	for _, comp := range cd.Components {
+		checks := comp.ruleChecks()
+		for _, ci := range comp.ControlImplementations {
+			for _, req := range ci.ImplementedRequirements {
+				for _, ruleID := range ruleIDs(req.Props) {
+					check, known := checks[ruleID]
+					if !known {
+						continue
+					}
+					out = append(out, ControlPolicy{
+						ControlID: req.ControlID,
+						Component: comp.Title,
+						PolicyID:  check,
+					})
+				}
+			}
+		}
+	}
+	return out
+}
+
+// UnresolvedRules returns control rule references whose Rule_Id is not defined
+// in the component's rule sets.
+func (cd ComponentDefinition) UnresolvedRules() []RuleRef {
+	var out []RuleRef
+	for _, comp := range cd.Components {
+		checks := comp.ruleChecks()
+		for _, ci := range comp.ControlImplementations {
+			for _, req := range ci.ImplementedRequirements {
+				for _, ruleID := range ruleIDs(req.Props) {
+					if _, known := checks[ruleID]; !known {
+						out = append(out, RuleRef{
+							ControlID: req.ControlID,
+							Component: comp.Title,
+							RuleID:    ruleID,
+						})
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+func ruleIDs(props []Prop) []string {
+	var ids []string
+	for _, p := range props {
+		if p.Name == "Rule_Id" {
+			ids = append(ids, p.Value)
+		}
+	}
+	return ids
 }
 
 // AssessmentResults is the OSCAL model that records the outcome of assessing a

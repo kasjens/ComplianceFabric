@@ -28,11 +28,19 @@ func findingsByRule(fs []Finding, rule string) []Finding {
 
 func componentDef(controlID string) oscal.ComponentDefinition {
 	return oscal.ComponentDefinition{
-		Mappings: []oscal.Mapping{{
-			ControlID: controlID,
-			ImplementedBy: []oscal.Implementation{
-				{Component: "platform-logging", PolicyID: "require-audit-logging"},
+		Components: []oscal.Component{{
+			Title: "platform-logging",
+			Props: []oscal.Prop{
+				{Name: "Rule_Id", Value: "audit-logging", Remarks: "rule_set_00"},
+				{Name: "Check_Id", Value: "require-audit-logging", Remarks: "rule_set_00"},
 			},
+			ControlImplementations: []oscal.ControlImplementation{{
+				Source: "annex11",
+				ImplementedRequirements: []oscal.ImplementedRequirement{{
+					ControlID: controlID,
+					Props:     []oscal.Prop{{Name: "Rule_Id", Value: "audit-logging"}},
+				}},
+			}},
 		}},
 	}
 }
@@ -117,32 +125,45 @@ func TestProfileControlCoverage(t *testing.T) {
 	})
 }
 
-func TestMappingBindingsNonEmpty(t *testing.T) {
-	t.Run("a mapping with no implementations is flagged", func(t *testing.T) {
+func TestRuleReferencesResolve(t *testing.T) {
+	t.Run("a requirement referencing an undefined rule is flagged", func(t *testing.T) {
 		b := Bundle{
 			Catalogs: []oscal.Catalog{annex11Catalog()},
-			ComponentDefinitions: []oscal.ComponentDefinition{{Mappings: []oscal.Mapping{{
-				ControlID: "annex11-9-audit-trail",
+			ComponentDefinitions: []oscal.ComponentDefinition{{Components: []oscal.Component{{
+				Title: "platform-logging",
+				ControlImplementations: []oscal.ControlImplementation{{
+					ImplementedRequirements: []oscal.ImplementedRequirement{{
+						ControlID: "annex11-9-audit-trail",
+						Props:     []oscal.Prop{{Name: "Rule_Id", Value: "ghost-rule"}},
+					}},
+				}},
 			}}}},
 		}
-		if got := findingsByRule(Run(b), "empty-mapping"); len(got) != 1 {
-			t.Fatalf("expected exactly 1 empty-mapping finding, got %d: %+v", len(got), got)
+		got := findingsByRule(Run(b), "unresolved-rule")
+		if len(got) != 1 {
+			t.Fatalf("expected exactly 1 unresolved-rule finding, got %d: %+v", len(got), got)
+		}
+		if got[0].ControlID != "annex11-9-audit-trail" {
+			t.Errorf("finding ControlID = %q, want %q", got[0].ControlID, "annex11-9-audit-trail")
 		}
 	})
 
-	t.Run("an implementation missing component or policy-id is flagged", func(t *testing.T) {
+	t.Run("a rule set without a check is flagged", func(t *testing.T) {
 		b := Bundle{
 			Catalogs: []oscal.Catalog{annex11Catalog()},
-			ComponentDefinitions: []oscal.ComponentDefinition{{Mappings: []oscal.Mapping{{
-				ControlID: "annex11-9-audit-trail",
-				ImplementedBy: []oscal.Implementation{
-					{Component: "platform-logging", PolicyID: ""},
-					{Component: "", PolicyID: "require-audit-logging"},
-				},
+			ComponentDefinitions: []oscal.ComponentDefinition{{Components: []oscal.Component{{
+				Title: "platform-logging",
+				Props: []oscal.Prop{{Name: "Rule_Id", Value: "audit-logging", Remarks: "rule_set_00"}},
+				ControlImplementations: []oscal.ControlImplementation{{
+					ImplementedRequirements: []oscal.ImplementedRequirement{{
+						ControlID: "annex11-9-audit-trail",
+						Props:     []oscal.Prop{{Name: "Rule_Id", Value: "audit-logging"}},
+					}},
+				}},
 			}}}},
 		}
-		if got := findingsByRule(Run(b), "incomplete-binding"); len(got) != 2 {
-			t.Fatalf("expected 2 incomplete-binding findings, got %d: %+v", len(got), got)
+		if got := findingsByRule(Run(b), "rule-missing-check"); len(got) != 1 {
+			t.Fatalf("expected exactly 1 rule-missing-check finding, got %d: %+v", len(got), got)
 		}
 	})
 }
