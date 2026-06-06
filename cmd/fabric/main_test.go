@@ -143,6 +143,32 @@ func TestPoliciesReportsMissingPolicyAndExitsNonZero(t *testing.T) {
 	}
 }
 
+func TestGenerateComposesSelectedPoliciesForShippedControls(t *testing.T) {
+	out := t.TempDir()
+	var buf bytes.Buffer
+	code := run([]string{"generate", repoControlsDir(t), repoDir(t, "policies"), out}, &buf)
+	if code != 0 {
+		t.Fatalf("expected exit 0 for generate, got %d. output:\n%s", code, buf.String())
+	}
+	// The pharma MES baseline selects audit-trail and access-control controls,
+	// whose Kyverno checks include require-audit-logging-annotations.
+	composed := filepath.Join(out, "kyverno", "require-audit-logging-annotations.yaml")
+	if _, err := os.Stat(composed); err != nil {
+		t.Fatalf("expected composed policy at %s: %v", composed, err)
+	}
+	// A control the baseline does not select must not be composed.
+	if _, err := os.Stat(filepath.Join(out, "kyverno", "require-encryption-at-rest.yaml")); err == nil {
+		t.Error("composed a policy for an unselected control")
+	}
+}
+
+func TestGenerateRequiresThreeArgs(t *testing.T) {
+	var buf bytes.Buffer
+	if code := run([]string{"generate", repoControlsDir(t)}, &buf); code != 2 {
+		t.Fatalf("expected exit 2 for missing generate args, got %d", code)
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {

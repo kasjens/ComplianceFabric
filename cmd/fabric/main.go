@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/kasjens/ComplianceFabric/internal/assess"
+	"github.com/kasjens/ComplianceFabric/internal/generate"
 	"github.com/kasjens/ComplianceFabric/internal/loader"
 	"github.com/kasjens/ComplianceFabric/internal/policies"
 	"github.com/kasjens/ComplianceFabric/internal/report"
@@ -21,7 +22,8 @@ func main() {
 
 const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric assess [--strict] <controls-dir>\n" +
-	"       fabric policies <controls-dir> <policies-dir>"
+	"       fabric policies <controls-dir> <policies-dir>\n" +
+	"       fabric generate <controls-dir> <policies-dir> <out-dir>"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -29,7 +31,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -48,8 +50,11 @@ func run(args []string, out io.Writer) int {
 	}
 
 	wantArgs := 1
-	if cmd == "policies" {
+	switch cmd {
+	case "policies":
 		wantArgs = 2
+	case "generate":
+		wantArgs = 3
 	}
 	if len(positional) != wantArgs {
 		fmt.Fprintln(out, usage)
@@ -72,8 +77,25 @@ func run(args []string, out io.Writer) int {
 		return runAssess(bundle, strict, out)
 	case "policies":
 		return runPolicies(bundle, positional[1], out)
+	case "generate":
+		return runGenerate(bundle, positional[1], positional[2], out)
 	}
 	return 2
+}
+
+func runGenerate(bundle validate.Bundle, policiesDir, outDir string, out io.Writer) int {
+	res, err := generate.Compose(bundle, policiesDir)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 1
+	}
+	if err := generate.Write(res, outDir); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	fmt.Fprintf(out, "composed %d policies for %d selected controls into %s\n",
+		len(res.Policies), len(res.SelectedControls), outDir)
+	return 0
 }
 
 func runPolicies(bundle validate.Bundle, policiesDir string, out io.Writer) int {

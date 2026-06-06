@@ -43,3 +43,6 @@ jobs:
 
       - name: Verify policy library traceability
         run: go run ./cmd/fabric policies controls policies
+
+      - name: Compose deployable policy set
+        run: go run ./cmd/fabric generate controls policies "$(mktemp -d)"
