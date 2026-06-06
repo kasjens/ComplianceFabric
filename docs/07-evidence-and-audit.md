@@ -10,6 +10,8 @@ Policy results, image attestations, drift status, and agent traces are collected
 
 Evidence is written to an append-only, tamper-evident store. No component, including the Fabric's own operators, can rewrite history. Each record is keyed to a control identifier and a timestamp, and where it concerns an artifact it references the transparency-log entry for that artifact. The append-only property is what makes the evidence defensible: a reviewer can trust that it was not edited to pass.
 
+The ledger achieves this by chaining: each stored entry carries a SHA-256 hash over the previous entry's hash and the record itself, so the entries form a linked chain. Mutating, deleting, or reordering any stored record breaks the chain, and `fabric ledger verify` detects the break. Records are persisted as one JSON object per line (JSON Lines).
+
 ## Data model
 
 The minimum shape of an evidence record:
@@ -26,7 +28,7 @@ The minimum shape of an evidence record:
 }
 ```
 
-**Implementation status:** the first producer of these records is `fabric evidence`, which keys a GitOps change-control record to `annex11-10-change-control` (`control-id`, `subject`, `result`, `observed-at`, `source`, with the pull request embedded as the raw evidence). Records are emitted to stdout today; the append-only ledger that retains them is Phase 3 work.
+**Implementation status:** the first producer of these records is `fabric evidence`, which keys a GitOps change-control record to `annex11-10-change-control` (`control-id`, `subject`, `result`, `observed-at`, `source`, with the pull request embedded as the raw evidence). Records are emitted to stdout, and `fabric evidence --ledger <path>` also appends them to the append-only ledger described above; `fabric ledger verify <path>` confirms the chain is intact. Still to come: the OSCAL assessment-results form, and producers for the other evidence sources (policy reports, attestations, drift, agent traces).
 
 ## Reporting
 

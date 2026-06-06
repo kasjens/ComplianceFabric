@@ -265,6 +265,70 @@ func TestEvidenceWithControlIdFlaggedExitsNonZero(t *testing.T) {
 	}
 }
 
+func TestEvidenceAppendsToLedgerAndVerifies(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 42, "state": "MERGED", "author": {"login": "kasjens"},
+  "mergedAt": "2026-06-05T14:30:00Z", "mergeCommit": {"oid": "32fa9af"},
+  "reviews": [{"author": {"login": "rev"}, "state": "APPROVED"}]
+}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"evidence", pr, "annex11-10-change-control", "--ledger", led}, &out); code != 0 {
+		t.Fatalf("expected exit 0 appending a valid change, got %d:\n%s", code, out.String())
+	}
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatalf("ledger not written: %v", err)
+	}
+	if !strings.Contains(string(data), "annex11-10-change-control") {
+		t.Errorf("ledger missing the control id:\n%s", string(data))
+	}
+
+	var vout bytes.Buffer
+	if code := run([]string{"ledger", "verify", led}, &vout); code != 0 {
+		t.Fatalf("expected exit 0 verifying an intact ledger, got %d:\n%s", code, vout.String())
+	}
+}
+
+func TestLedgerVerifyDetectsTampering(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 42, "state": "MERGED", "author": {"login": "kasjens"},
+  "mergedAt": "2026-06-05T14:30:00Z", "mergeCommit": {"oid": "32fa9af"},
+  "reviews": [{"author": {"login": "rev"}, "state": "APPROVED"}]
+}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"evidence", pr, "annex11-10-change-control", "--ledger", led}, &out); code != 0 {
+		t.Fatalf("append failed: %d\n%s", code, out.String())
+	}
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tampered := strings.Replace(string(data), "satisfied", "not-satisfied", 1)
+	if err := os.WriteFile(led, []byte(tampered), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var vout bytes.Buffer
+	if code := run([]string{"ledger", "verify", led}, &vout); code != 1 {
+		t.Fatalf("expected exit 1 for a tampered ledger, got %d:\n%s", code, vout.String())
+	}
+}
+
+func TestLedgerRequiresVerifyAndPath(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"ledger"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing ledger args, got %d", code)
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {

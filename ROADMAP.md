@@ -21,11 +21,11 @@ The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architec
 
 - SBOM and SLSA provenance in the reference pipeline.
 - Sigstore signature verification at admission. **Done:** keyless `verify-image-signatures` policy; deny path proven on kind, admit path exercised in CI.
-- Change-control evidence from GitOps pull-request and merge records. **Done:** the `fabric evidence` command derives an attributable, time-stamped change-control record from a pull request, flags invalid authorizations, and emits an evidence-ledger record keyed to the `annex11-10-change-control` control. Remaining: persisting records to the append-only ledger (Phase 3) and emitting them in full OSCAL assessment-results form.
+- Change-control evidence from GitOps pull-request and merge records. **Done:** the `fabric evidence` command derives an attributable, time-stamped change-control record from a pull request, flags invalid authorizations, and emits an evidence-ledger record keyed to the `annex11-10-change-control` control. Records persist to the append-only ledger via `fabric evidence --ledger` (see Phase 3). Remaining: emitting them in full OSCAL assessment-results form.
 
 ## Phase 3: Evidence and reporting
 
-- An append-only evidence ledger keyed to control identifiers.
+- An append-only evidence ledger keyed to control identifiers. **Done:** the `internal/ledger` store chains records by hash (tamper-evident, JSON Lines); `fabric evidence --ledger` appends and `fabric ledger verify` checks the chain.
 - Continuous assessment across the mapped controls.
 - A posture view of live control coverage.
 
