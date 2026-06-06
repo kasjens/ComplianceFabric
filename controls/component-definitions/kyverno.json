@@ -1,0 +1,39 @@
+{
+  "metadata": {
+    "title": "Kyverno enforcement mappings",
+    "version": "0.1.0"
+  },
+  "mappings": [
+    {
+      "control-id": "annex11-12-1-access-control",
+      "description": "Restrict cluster access to authorised workloads via least-privilege admission policy.",
+      "implemented-by": [
+        { "component": "kyverno", "policy-id": "disallow-cluster-admin-binding" },
+        { "component": "kyverno", "policy-id": "require-run-as-non-root" }
+      ]
+    },
+    {
+      "control-id": "cfr-part-11-10d-access-control",
+      "description": "Block anonymous and unauthenticated access at admission.",
+      "implemented-by": [
+        { "component": "kyverno", "policy-id": "restrict-anonymous-access" }
+      ]
+    },
+    {
+      "control-id": "annex11-9-audit-trail",
+      "description": "Require workloads to emit GMP-relevant change records to the platform audit pipeline.",
+      "implemented-by": [
+        { "component": "kyverno", "policy-id": "require-audit-logging-annotations" },
+        { "component": "evidence-ledger", "policy-id": "append-only-storage" }
+      ]
+    },
+    {
+      "control-id": "cfr-part-11-10e-audit-trail",
+      "description": "Ensure secure, time-stamped audit trails are produced and retained immutably.",
+      "implemented-by": [
+        { "component": "kyverno", "policy-id": "require-audit-logging-annotations" },
+        { "component": "evidence-ledger", "policy-id": "append-only-storage" }
+      ]
+    }
+  ]
+}

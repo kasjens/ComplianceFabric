@@ -1,0 +1,29 @@
+{
+  "id": "annex11",
+  "metadata": {
+    "title": "EU GMP Annex 11 - Computerised Systems",
+    "version": "2011-06-30"
+  },
+  "controls": [
+    {
+      "id": "annex11-5-accuracy-checks",
+      "title": "Accuracy checks",
+      "statement": "For critical data entered manually, there should be an additional check on the accuracy of the data. This check may be done by a second operator or by validated electronic means."
+    },
+    {
+      "id": "annex11-7-1-data-storage",
+      "title": "Data storage protection",
+      "statement": "Data should be secured by both physical and electronic means against damage. Stored data should be checked for accessibility, readability and accuracy."
+    },
+    {
+      "id": "annex11-9-audit-trail",
+      "title": "Audit trail",
+      "statement": "Consideration should be given to building into the system the creation of a record of all GMP-relevant changes and deletions (a system generated audit trail)."
+    },
+    {
+      "id": "annex11-12-1-access-control",
+      "title": "Access control",
+      "statement": "Physical and/or logical controls should be in place to restrict access to computerised systems to authorised persons."
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "title": "Pharma MES Baseline",
+    "version": "0.1.0"
+  },
+  "imports": [
+    {
+      "href": "annex11",
+      "include-controls": [
+        "annex11-9-audit-trail",
+        "annex11-12-1-access-control"
+      ]
+    },
+    {
+      "href": "cfr-part-11",
+      "include-controls": [
+        "cfr-part-11-10d-access-control",
+        "cfr-part-11-10e-audit-trail"
+      ]
+    }
+  ]
+}

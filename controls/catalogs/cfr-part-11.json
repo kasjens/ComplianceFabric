@@ -1,0 +1,29 @@
+{
+  "id": "cfr-part-11",
+  "metadata": {
+    "title": "21 CFR Part 11 - Electronic Records; Electronic Signatures",
+    "version": "1997-08-20"
+  },
+  "controls": [
+    {
+      "id": "cfr-part-11-10c-record-protection",
+      "title": "Protection of records",
+      "statement": "Protection of records to enable their accurate and ready retrieval throughout the records retention period."
+    },
+    {
+      "id": "cfr-part-11-10d-access-control",
+      "title": "Limiting system access",
+      "statement": "Limiting system access to authorized individuals."
+    },
+    {
+      "id": "cfr-part-11-10e-audit-trail",
+      "title": "Secure, computer-generated audit trails",
+      "statement": "Use of secure, computer-generated, time-stamped audit trails to independently record the date and time of operator entries and actions that create, modify, or delete electronic records."
+    },
+    {
+      "id": "cfr-part-11-300b-password-controls",
+      "title": "Identification code and password controls",
+      "statement": "Ensuring that identification code and password issuances are periodically checked, recalled, or revised."
+    }
+  ]
+}
