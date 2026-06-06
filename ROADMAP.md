@@ -21,7 +21,7 @@ The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architec
 
 - SBOM and SLSA provenance in the reference pipeline.
 - Sigstore signature verification at admission. **Done:** keyless `verify-image-signatures` policy; deny path proven on kind, admit path exercised in CI.
-- Change-control evidence from GitOps pull-request and merge records.
+- Change-control evidence from GitOps pull-request and merge records. **Done (core):** the `fabric evidence` command derives an attributable, time-stamped change-control record from a pull request and flags invalid authorizations. Remaining: keying the record to a control id and emitting it as OSCAL assessment-results.
 
 ## Phase 3: Evidence and reporting
 

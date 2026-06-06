@@ -29,6 +29,8 @@ Git is the desired state of the platform. Argo CD or Flux reconciles the cluster
 - Every change is a pull request. The PR record, with its reviewer approvals and merge timestamp, is the change-control record that Annex 11 and Part 11 expect. A reviewed, approved, merged PR is an electronic record of who authorized a change and when.
 - Drift detection is continuous. When live state diverges from Git, the controller flags it. This is the same as asking, continuously, whether the qualified state is still intact.
 
+**Implementation status:** the `fabric evidence` command extracts the change-control record from a pull request (`gh pr view --json` output) — author, reviewer approvals, merge timestamp, and merge commit — and flags records that are not valid authorized changes (not merged, no approval, and so on). It exits non-zero on findings so it can gate CI. Still to come: keying each record to a control id and emitting it as OSCAL assessment-results for the evidence ledger. Drift detection is not yet implemented.
+
 ## Mapping to electronic records
 
 A merge that changes the platform is an attributable, time-stamped, retained record of an authorized change. Paired with the transparency log entry for the artifact it deploys, it links a specific change to a specific, verified build. That chain is the evidence a Part 11 or Annex 11 reviewer asks for.
