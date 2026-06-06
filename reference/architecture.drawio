@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" type="device" compressed="false">
+  <diagram id="gxp-compliance-fabric" name="GxP Compliance Fabric - Reference Architecture">
+    <mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1654" pageHeight="1240" background="#ffffff" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <mxCell id="title" value="GxP Compliance Fabric &#183; Reference architecture (Kubernetes)" style="text;html=1;align=left;verticalAlign=middle;fontSize=22;fontStyle=1;fontColor=#1a1a1a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="18" width="1574" height="34" as="geometry"/>
+        </mxCell>
+        <mxCell id="subtitle" value="A continuous-compliance control and evidence layer woven across a regulated Kubernetes platform. Authored controls become enforced policy; running state becomes audit-ready evidence." style="text;html=1;align=left;verticalAlign=middle;fontSize=13;fontStyle=2;fontColor=#666666;" vertex="1" parent="1">
+          <mxGeometry x="40" y="54" width="1574" height="22" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="band1" value="1 &#183; Control authoring (compliance-as-code, in Git)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize=30;fontSize=14;fontStyle=1;fontColor=#222222;verticalAlign=top;horizontal=1;container=1;collapsible=0;fillColor=#e1d5e7;strokeColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="40" y="90" width="1574" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b1a" value="OSCAL catalogs &amp; profiles&lt;br&gt;(controls expressed as code)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="band1">
+          <mxGeometry x="30" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b1b" value="GxP control set&lt;br&gt;GAMP 5 &#183; Annex 11 &#183; Part 11 &#183; ALCOA+" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="band1">
+          <mxGeometry x="416" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b1c" value="Cross-sector profiles&lt;br&gt;DORA &#183; NIS2 &#183; ISO 42001 &#183; EU AI Act" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="band1">
+          <mxGeometry x="802" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b1d" value="Control &#8594; policy mappings&lt;br&gt;(OSCAL component definitions)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#9673a6;" vertex="1" parent="band1">
+          <mxGeometry x="1188" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="band2" value="2 &#183; Policy translation &amp; enforcement   (CI &#183; admission &#183; runtime)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize=30;fontSize=14;fontStyle=1;fontColor=#222222;verticalAlign=top;horizontal=1;container=1;collapsible=0;fillColor=#f8cecc;strokeColor=#b85450;" vertex="1" parent="1">
+          <mxGeometry x="40" y="270" width="1574" height="140" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2a" value="Compliance-to-Policy (C2P)&lt;br&gt;OSCAL Compass" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#b85450;" vertex="1" parent="band2">
+          <mxGeometry x="30" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2b" value="Kyverno&lt;br&gt;admission + runtime policy" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#b85450;" vertex="1" parent="band2">
+          <mxGeometry x="416" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2c" value="OPA / Gatekeeper&lt;br&gt;Rego policies" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#b85450;" vertex="1" parent="band2">
+          <mxGeometry x="802" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b2d" value="Sigstore policy-controller&lt;br&gt;signature &amp; provenance checks" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#b85450;" vertex="1" parent="band2">
+          <mxGeometry x="1188" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="band3" value="3 &#183; Trusted delivery &amp; change control" style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize=30;fontSize=14;fontStyle=1;fontColor=#222222;verticalAlign=top;horizontal=1;container=1;collapsible=0;fillColor=#fff2cc;strokeColor=#d6b656;" vertex="1" parent="1">
+          <mxGeometry x="40" y="450" width="1574" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3a" value="SBOM + SLSA provenance&lt;br&gt;Syft &#183; CycloneDX" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#c9a227;" vertex="1" parent="band3">
+          <mxGeometry x="30" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3b" value="Signing &amp; transparency&lt;br&gt;Cosign keyless &#183; Rekor log" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#c9a227;" vertex="1" parent="band3">
+          <mxGeometry x="416" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3c" value="GitOps delivery&lt;br&gt;Argo CD / Flux" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#c9a227;" vertex="1" parent="band3">
+          <mxGeometry x="802" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b3d" value="Change control&lt;br&gt;drift detection &#183; PR = e-signature" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#c9a227;" vertex="1" parent="band3">
+          <mxGeometry x="1188" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="band4" value="4 &#183; AI agent governance   (the differentiator)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize=30;fontSize=14;fontStyle=1;fontColor=#222222;verticalAlign=top;horizontal=1;container=1;collapsible=0;fillColor=#dae8fc;strokeColor=#6c8ebf;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="1574" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4a" value="AI / MCP gateway&lt;br&gt;routed, allow-listed tools" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="band4">
+          <mxGeometry x="30" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4b" value="Agent + prompt/tool registry&lt;br&gt;versioned in Git" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="band4">
+          <mxGeometry x="416" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4c" value="Guardrails + eval gates&lt;br&gt;PII &#183; jailbreak &#183; hallucination" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="band4">
+          <mxGeometry x="802" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b4d" value="Interaction tracing&lt;br&gt;OpenTelemetry &#8594; who/what/when" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#6c8ebf;" vertex="1" parent="band4">
+          <mxGeometry x="1188" y="66" width="356" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="band5" value="5 &#183; Regulated Kubernetes platform (the substrate)" style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize=30;fontSize=14;fontStyle=1;fontColor=#222222;verticalAlign=top;horizontal=1;container=1;collapsible=0;fillColor=#f5f5f5;strokeColor=#666666;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="830" width="1574" height="160" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5a" value="Cluster fleet&lt;br&gt;multi-cluster (OCM)" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="band5">
+          <mxGeometry x="30" y="70" width="280" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5b" value="Regulated workloads&lt;br&gt;MES &#183; LIMS &#183; eQMS" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="band5">
+          <mxGeometry x="335" y="70" width="280" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5c" value="AI agents&lt;br&gt;in production" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="band5">
+          <mxGeometry x="640" y="70" width="280" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5d" value="Identity &amp; RBAC&lt;br&gt;OIDC &#183; least privilege" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="band5">
+          <mxGeometry x="945" y="70" width="280" height="70" as="geometry"/>
+        </mxCell>
+        <mxCell id="b5e" value="Observability&lt;br&gt;OTel &#183; logs &#183; metrics" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#666666;" vertex="1" parent="band5">
+          <mxGeometry x="1250" y="70" width="280" height="70" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="band6" value="6 &#183; Evidence, assessment &amp; audit" style="swimlane;rounded=1;whiteSpace=wrap;html=1;startSize=30;fontSize=14;fontStyle=1;fontColor=#222222;verticalAlign=top;horizontal=1;container=1;collapsible=0;fillColor=#d5e8d4;strokeColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1030" width="1574" height="150" as="geometry"/>
+        </mxCell>
+        <mxCell id="b6a" value="Continuous assessment&lt;br&gt;OSCAL assessment results" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="band6">
+          <mxGeometry x="30" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b6b" value="Immutable evidence ledger&lt;br&gt;WORM &#183; tamper-evident" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="band6">
+          <mxGeometry x="416" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b6c" value="Compliance posture dashboard&lt;br&gt;live control coverage" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="band6">
+          <mxGeometry x="802" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="b6d" value="On-demand audit packs&lt;br&gt;IQ/OQ/PQ &#183; audit trail &#183; AI Act file" style="rounded=1;whiteSpace=wrap;html=1;fontSize=12;fontColor=#1f2430;align=center;verticalAlign=middle;fillColor=#ffffff;strokeColor=#82b366;" vertex="1" parent="band6">
+          <mxGeometry x="1188" y="60" width="356" height="60" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="e1" value="controls &#8594; policy" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=11;fontColor=#333333;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="band1" target="band2">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e2" value="gate the pipeline" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=11;fontColor=#333333;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="band2" target="band3">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e3" value="trusted artifacts only" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=11;fontColor=#333333;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="band3" target="band4">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e4" value="governed agents run here" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=11;fontColor=#333333;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="band4" target="band5">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e5" value="state &amp; telemetry &#8594; evidence" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;strokeWidth=2;endArrow=block;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;fontSize=11;fontColor=#333333;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="band5" target="band6">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="e6" value="gaps feed back to controls (closed loop)" style="edgeStyle=orthogonalEdgeStyle;html=1;rounded=0;dashed=1;strokeWidth=2;strokeColor=#9673a6;endArrow=block;endFill=1;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;fontSize=11;fontColor=#7a5ba6;labelBackgroundColor=#ffffff;" edge="1" parent="1" source="band6" target="band1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="18" y="1105"/>
+              <mxPoint x="18" y="160"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

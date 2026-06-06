@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/kasjens/ComplianceFabric/security/policy
+    about: Do not file security issues in public. See the security policy.
+  - name: Questions and discussion
+    url: https://github.com/kasjens/ComplianceFabric/discussions
+    about: Ask questions and discuss ideas here.
