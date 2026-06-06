@@ -28,7 +28,7 @@ The minimum shape of an evidence record:
 }
 ```
 
-**Implementation status:** the first producer of these records is `fabric evidence`, which keys a GitOps change-control record to `annex11-10-change-control` (`control-id`, `subject`, `result`, `observed-at`, `source`, with the pull request embedded as the raw evidence). Records are emitted to stdout, and `fabric evidence --ledger <path>` also appends them to the append-only ledger described above; `fabric ledger verify <path>` confirms the chain is intact. Still to come: the OSCAL assessment-results form, and producers for the other evidence sources (policy reports, attestations, drift, agent traces).
+**Implementation status:** the first producer of these records is `fabric evidence`, which keys a GitOps change-control record to `annex11-10-change-control` (`control-id`, `subject`, `result`, `observed-at`, `source`, with the pull request embedded as the raw evidence). Records are emitted to stdout, and `fabric evidence --ledger <path>` also appends them to the append-only ledger described above; `fabric ledger verify <path>` confirms the chain is intact. `fabric ledger assess <path>` normalizes the stored records into an OSCAL assessment-results document — one finding per record, each tracing back to the control it bears on, the same model `fabric assess` emits — so evidence and design-time coverage share one shape. Still to come: producers for the other evidence sources (policy reports, attestations, drift, agent traces).
 
 ## Reporting
 

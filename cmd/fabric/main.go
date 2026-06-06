@@ -29,7 +29,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric policies <controls-dir> <policies-dir>\n" +
 	"       fabric generate <controls-dir> <policies-dir> <out-dir>\n" +
 	"       fabric evidence <pr-json-file> [control-id] [--ledger <path>]\n" +
-	"       fabric ledger verify <ledger-path>"
+	"       fabric ledger <verify|assess> <ledger-path>"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -84,13 +84,22 @@ func run(args []string, out io.Writer) int {
 		return runEvidence(positional[0], controlID, ledgerPath, out)
 	}
 
-	// ledger verify walks a ledger file and checks its hash chain is intact.
+	// ledger verify checks a ledger's hash chain is intact; ledger assess
+	// normalizes its records into an OSCAL assessment-results document.
 	if cmd == "ledger" {
-		if len(positional) != 2 || positional[0] != "verify" {
+		if len(positional) != 2 {
 			fmt.Fprintln(out, usage)
 			return 2
 		}
-		return runLedgerVerify(positional[1], out)
+		switch positional[0] {
+		case "verify":
+			return runLedgerVerify(positional[1], out)
+		case "assess":
+			return runLedgerAssess(positional[1], out)
+		default:
+			fmt.Fprintln(out, usage)
+			return 2
+		}
 	}
 
 	wantArgs := 1
@@ -186,6 +195,29 @@ func runLedgerVerify(path string, out io.Writer) int {
 		return 1
 	}
 	fmt.Fprintln(out, "ledger verification passed: chain intact")
+	return 0
+}
+
+func runLedgerAssess(path string, out io.Writer) int {
+	entries, err := ledger.Open(path).Entries()
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records := make([]evidence.Record, 0, len(entries))
+	for _, e := range entries {
+		records = append(records, e.Record)
+	}
+	results := evidence.AssessmentResults(records)
+	enc := json.NewEncoder(out)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(results); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	if len(assess.NotSatisfied(results)) > 0 {
+		return 1
+	}
 	return 0
 }
 

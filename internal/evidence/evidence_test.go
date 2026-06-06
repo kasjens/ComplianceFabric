@@ -127,6 +127,52 @@ func TestAsEvidenceForFlaggedChangeIsNotSatisfied(t *testing.T) {
 	}
 }
 
+func TestAssessmentResultsMapsRecordsToFindings(t *testing.T) {
+	merged, err := Extract([]byte(mergedPR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	open, err := Extract([]byte(openPR))
+	if err != nil {
+		t.Fatal(err)
+	}
+	records := []Record{
+		merged.AsEvidence("annex11-10-change-control"),
+		open.AsEvidence("annex11-10-change-control"),
+	}
+
+	ar := AssessmentResults(records)
+	if len(ar.Results) != 1 {
+		t.Fatalf("want one result group, got %d", len(ar.Results))
+	}
+	findings := ar.Results[0].Findings
+	if len(findings) != 2 {
+		t.Fatalf("want a finding per record, got %d", len(findings))
+	}
+	if findings[0].ControlID != "annex11-10-change-control" {
+		t.Errorf("finding control id = %q, want annex11-10-change-control", findings[0].ControlID)
+	}
+	if findings[0].Status != "satisfied" {
+		t.Errorf("merged change finding status = %q, want satisfied", findings[0].Status)
+	}
+	if findings[1].Status != "not-satisfied" {
+		t.Errorf("open change finding status = %q, want not-satisfied", findings[1].Status)
+	}
+	if !strings.Contains(findings[0].Statement, "github/pull-request#42") {
+		t.Errorf("finding statement %q should reference the evidence source", findings[0].Statement)
+	}
+}
+
+func TestAssessmentResultsEmptyForNoRecords(t *testing.T) {
+	ar := AssessmentResults(nil)
+	if len(ar.Results) != 1 {
+		t.Fatalf("want one result group even when empty, got %d", len(ar.Results))
+	}
+	if len(ar.Results[0].Findings) != 0 {
+		t.Errorf("want no findings for no records, got %d", len(ar.Results[0].Findings))
+	}
+}
+
 func TestExtractDeduplicatesRepeatedApprover(t *testing.T) {
 	rec, err := Extract([]byte(mergedPR))
 	if err != nil {

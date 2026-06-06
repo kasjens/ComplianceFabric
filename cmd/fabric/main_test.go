@@ -329,6 +329,68 @@ func TestLedgerRequiresVerifyAndPath(t *testing.T) {
 	}
 }
 
+func TestLedgerAssessEmitsOSCALResults(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 42, "state": "MERGED", "author": {"login": "kasjens"},
+  "mergedAt": "2026-06-05T14:30:00Z", "mergeCommit": {"oid": "32fa9af"},
+  "reviews": [{"author": {"login": "rev"}, "state": "APPROVED"}]
+}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"evidence", pr, "annex11-10-change-control", "--ledger", led}, &out); code != 0 {
+		t.Fatalf("append failed: %d\n%s", code, out.String())
+	}
+
+	var aout bytes.Buffer
+	if code := run([]string{"ledger", "assess", led}, &aout); code != 0 {
+		t.Fatalf("expected exit 0 assessing a satisfied ledger, got %d:\n%s", code, aout.String())
+	}
+	var ar struct {
+		Results []struct {
+			Findings []struct {
+				ControlID string `json:"control-id"`
+				Status    string `json:"status"`
+			} `json:"findings"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(aout.Bytes(), &ar); err != nil {
+		t.Fatalf("output is not OSCAL assessment-results JSON: %v\n%s", err, aout.String())
+	}
+	if len(ar.Results) != 1 || len(ar.Results[0].Findings) != 1 {
+		t.Fatalf("want one finding, got %+v", ar.Results)
+	}
+	if ar.Results[0].Findings[0].ControlID != "annex11-10-change-control" {
+		t.Errorf("finding control id = %q", ar.Results[0].Findings[0].ControlID)
+	}
+	if ar.Results[0].Findings[0].Status != "satisfied" {
+		t.Errorf("finding status = %q, want satisfied", ar.Results[0].Findings[0].Status)
+	}
+}
+
+func TestLedgerAssessExitsNonZeroOnNotSatisfied(t *testing.T) {
+	dir := t.TempDir()
+	pr := filepath.Join(dir, "pr.json")
+	writeFixture(t, pr, `{
+  "number": 7, "state": "OPEN", "author": {"login": "kasjens"},
+  "mergedAt": null, "mergeCommit": null, "reviews": []
+}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	// An unmerged change is flagged (exit 1) but still recorded to the ledger.
+	if code := run([]string{"evidence", pr, "annex11-10-change-control", "--ledger", led}, &out); code != 1 {
+		t.Fatalf("expected exit 1 for a flagged change, got %d\n%s", code, out.String())
+	}
+
+	var aout bytes.Buffer
+	if code := run([]string{"ledger", "assess", led}, &aout); code != 1 {
+		t.Fatalf("expected exit 1 when the ledger has a not-satisfied finding, got %d:\n%s", code, aout.String())
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {

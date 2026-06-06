@@ -80,6 +80,39 @@ func (r ChangeRecord) AsEvidence(controlID string) Record {
 	}
 }
 
+// AsFinding turns an evidence record into an OSCAL assessment finding, carrying
+// the control id and observed result through unchanged and summarizing where the
+// evidence came from in the statement.
+func (r Record) AsFinding() oscal.AssessmentFinding {
+	return oscal.AssessmentFinding{
+		ControlID: r.ControlID,
+		Status:    r.Result,
+		Statement: fmt.Sprintf("observed %s from %s at %s", r.Subject, r.Source, r.ObservedAt.Format(time.RFC3339)),
+	}
+}
+
+// AssessmentResults normalizes a set of evidence records into an OSCAL
+// assessment-results document: one finding per record, each tracing back to the
+// control it bears on. This is the form an audit pack or posture view queries,
+// and it is the same model fabric assess emits, so evidence and design-time
+// coverage share one shape.
+func AssessmentResults(records []Record) oscal.AssessmentResults {
+	findings := make([]oscal.AssessmentFinding, 0, len(records))
+	for _, rec := range records {
+		findings = append(findings, rec.AsFinding())
+	}
+	return oscal.AssessmentResults{
+		Metadata: oscal.Metadata{
+			Title:   "Evidence-based control assessment",
+			Version: "0.1.0",
+		},
+		Results: []oscal.Result{{
+			Title:    "Observed control evidence",
+			Findings: findings,
+		}},
+	}
+}
+
 // Extract parses a `gh pr view --json` record into a ChangeRecord. Approvers are
 // the distinct logins whose latest review state is APPROVED, in first-seen order.
 func Extract(prJSON []byte) (ChangeRecord, error) {
