@@ -84,6 +84,102 @@ func TestFromPolicyReportMapsResultsToControls(t *testing.T) {
 	}
 }
 
+// policyReportListJSON is what `kubectl get policyreport -o json` returns when
+// the namespace holds more than one report: a List wrapper with items[]. Kyverno
+// generates one PolicyReport per resource, so this is the common live shape.
+const policyReportListJSON = `{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "apiVersion": "wgpolicyk8s.io/v1alpha2",
+      "kind": "PolicyReport",
+      "metadata": { "namespace": "e2e", "name": "rep-1" },
+      "results": [
+        {
+          "policy": "require-run-as-non-root",
+          "rule": "run-as-non-root",
+          "result": "pass",
+          "resources": [{ "kind": "Pod", "namespace": "e2e", "name": "compliant" }],
+          "timestamp": { "seconds": 1717661640, "nanos": 0 }
+        }
+      ]
+    },
+    {
+      "apiVersion": "wgpolicyk8s.io/v1alpha2",
+      "kind": "PolicyReport",
+      "metadata": { "namespace": "e2e", "name": "rep-2" },
+      "results": [
+        {
+          "policy": "require-audit-logging-annotations",
+          "rule": "require-audit-logging",
+          "result": "pass",
+          "resources": [{ "kind": "Pod", "namespace": "e2e", "name": "compliant" }],
+          "timestamp": { "seconds": 1717661640, "nanos": 0 }
+        }
+      ]
+    }
+  ]
+}`
+
+func TestFromPolicyReportHandlesListShape(t *testing.T) {
+	records, err := FromPolicyReport([]byte(policyReportListJSON), policyControls())
+	if err != nil {
+		t.Fatalf("FromPolicyReport: %v", err)
+	}
+	// Both items' results aggregate; each maps to its control.
+	if len(records) != 2 {
+		t.Fatalf("want 2 records across the list items, got %d: %+v", len(records), records)
+	}
+	if records[0].ControlID != "annex11-12-1-access-control" {
+		t.Errorf("first control id = %q", records[0].ControlID)
+	}
+	if records[1].ControlID != "annex11-9-audit-trail" {
+		t.Errorf("second control id = %q", records[1].ControlID)
+	}
+	for _, r := range records {
+		if r.Result != "satisfied" {
+			t.Errorf("record %q result = %q, want satisfied", r.ControlID, r.Result)
+		}
+	}
+}
+
+// liveReportListJSON mirrors a real Kyverno background report: the audited
+// resource is carried in the item-level `scope`, and the results have no
+// per-result `resources` array. The subject must still identify the workload.
+const liveReportListJSON = `{
+  "apiVersion": "v1",
+  "kind": "List",
+  "items": [
+    {
+      "kind": "PolicyReport",
+      "metadata": { "namespace": "e2e", "name": "rep-1" },
+      "scope": { "kind": "Pod", "namespace": "e2e", "name": "compliant" },
+      "results": [
+        {
+          "policy": "require-run-as-non-root",
+          "rule": "run-as-non-root",
+          "result": "pass",
+          "timestamp": { "seconds": 1717661640, "nanos": 0 }
+        }
+      ]
+    }
+  ]
+}`
+
+func TestFromPolicyReportDerivesSubjectFromScope(t *testing.T) {
+	records, err := FromPolicyReport([]byte(liveReportListJSON), policyControls())
+	if err != nil {
+		t.Fatalf("FromPolicyReport: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("want 1 record, got %d: %+v", len(records), records)
+	}
+	if records[0].Subject != "ns/e2e/Pod/compliant" {
+		t.Errorf("subject = %q, want ns/e2e/Pod/compliant (from item scope)", records[0].Subject)
+	}
+}
+
 func TestFromPolicyReportSkipsUnmappedPolicy(t *testing.T) {
 	// A report referencing a policy with no control mapping yields no records.
 	report := `{"results":[{"policy":"some-other-policy","result":"pass",

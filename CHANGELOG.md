@@ -32,6 +32,9 @@ All notable changes to this project are recorded here. The format follows Keep a
 - A fifth evidence producer: `fabric eval-gate <eval-run-file> <gate-file> <control-id>` runs an agent version's evaluation results through the gate and records the verdict — satisfied when the version would promote, not-satisfied when the gate blocks it. Records feed the same ledger, `--ledger <path>` to append, so promotion decisions roll up through `fabric ledger assess` and `fabric ledger posture`.
 - The `eu-ai-act-15-accuracy-robustness` control (EU AI Act Article 15 - accuracy, robustness, and cybersecurity) in the `eu-ai-act` catalog, implemented by a non-Kyverno `eval-gate` component's `agent-eval-gate` check and selected in the pharma MES baseline, so coverage, assessment, and posture recognize pre-promotion evaluation gating as enforcement behind a control.
 
+- Reproducible Phase 1 admission e2e harness (`test/e2e/admission.sh`), wired into CI as a kind-based job: it stands up a kind cluster, installs Kyverno, applies the Phase 1 policy library (the image-signature policy excepted — Phase 2), and asserts all three enforcement behaviours — a non-compliant Pod is denied at admission, a compliant Pod is admitted, and Kyverno's background scan produces a PolicyReport that `fabric policy-report` turns into satisfied evidence the ledger accepts and verifies. This closes the previously non-reproducible "proven on a kind cluster" claim.
+
 ### Changed
 
+- `fabric policy-report` now accepts the List shape `kubectl get policyreport -o json` returns when a namespace holds more than one report (Kyverno writes one report per resource), and derives the evidence subject from a report's item-level `scope` when results carry no per-result `resources` — so live background reports yield subject-bearing evidence, not just the single-report fixture shape.
 - Renamed the project from "GxP Compliance Fabric" to "Compliance Fabric" across documentation and metadata.

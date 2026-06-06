@@ -13,6 +13,10 @@ import (
 // the controls the reported policies enforce. policyControls maps a policy name
 // to the control ids it annotates with fabric.control-id.
 //
+// It accepts either a single PolicyReport object or the List wrapper kubectl
+// returns when a namespace holds more than one report (Kyverno writes one report
+// per resource); a List's items are flattened and their results aggregated.
+//
 // A pass result is satisfied; fail, error, and warn are not-satisfied; skip
 // produces no evidence (the policy did not apply to the resource). Results whose
 // policy is not mapped to a control are ignored. A result is fanned out to one
@@ -23,22 +27,47 @@ func FromPolicyReport(reportJSON []byte, policyControls map[string][]string) ([]
 		Namespace string `json:"namespace"`
 		Name      string `json:"name"`
 	}
-	var report struct {
-		Results []struct {
-			Policy    string     `json:"policy"`
-			Result    string     `json:"result"`
-			Resources []resource `json:"resources"`
-			Timestamp struct {
-				Seconds int64 `json:"seconds"`
-			} `json:"timestamp"`
-		} `json:"results"`
+	type result struct {
+		Policy    string     `json:"policy"`
+		Result    string     `json:"result"`
+		Resources []resource `json:"resources"`
+		Timestamp struct {
+			Seconds int64 `json:"seconds"`
+		} `json:"timestamp"`
 	}
-	if err := json.Unmarshal(reportJSON, &report); err != nil {
+	type doc struct {
+		Scope   *resource `json:"scope"`
+		Results []result  `json:"results"`
+		Items   []struct {
+			Scope   *resource `json:"scope"`
+			Results []result  `json:"results"`
+		} `json:"items"`
+	}
+	var parsed doc
+	if err := json.Unmarshal(reportJSON, &parsed); err != nil {
 		return nil, err
 	}
 
+	// Pair each result with the scope of its enclosing report. Kyverno's
+	// background reports carry the audited resource at the report level (scope)
+	// rather than per result.
+	type scopedResult struct {
+		res   result
+		scope *resource
+	}
+	var results []scopedResult
+	for _, res := range parsed.Results {
+		results = append(results, scopedResult{res, parsed.Scope})
+	}
+	for _, item := range parsed.Items {
+		for _, res := range item.Results {
+			results = append(results, scopedResult{res, item.Scope})
+		}
+	}
+
 	var records []Record
-	for _, res := range report.Results {
+	for _, sr := range results {
+		res := sr.res
 		if res.Result == "skip" {
 			continue
 		}
@@ -50,13 +79,18 @@ func FromPolicyReport(reportJSON []byte, policyControls map[string][]string) ([]
 		if res.Result == "pass" {
 			status = oscal.StatusSatisfied
 		}
-		subject := ""
+		var subj *resource
 		if len(res.Resources) > 0 {
-			r := res.Resources[0]
-			if r.Namespace != "" {
-				subject = fmt.Sprintf("ns/%s/%s/%s", r.Namespace, r.Kind, r.Name)
+			subj = &res.Resources[0]
+		} else if sr.scope != nil {
+			subj = sr.scope
+		}
+		subject := ""
+		if subj != nil {
+			if subj.Namespace != "" {
+				subject = fmt.Sprintf("ns/%s/%s/%s", subj.Namespace, subj.Kind, subj.Name)
 			} else {
-				subject = fmt.Sprintf("%s/%s", r.Kind, r.Name)
+				subject = fmt.Sprintf("%s/%s", subj.Kind, subj.Name)
 			}
 		}
 		observedAt := time.Unix(res.Timestamp.Seconds, 0).UTC()

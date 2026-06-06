@@ -46,3 +46,30 @@ jobs:
 
       - name: Compose deployable policy set
         run: go run ./cmd/fabric generate controls policies "$(mktemp -d)"
+
+  e2e:
+    name: Phase 1 admission e2e (kind)
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install kind
+        run: |
+          curl -fsSLo /usr/local/bin/kind \
+            https://kind.sigs.k8s.io/dl/v0.23.0/kind-linux-amd64
+          chmod +x /usr/local/bin/kind
+
+      - name: Install kubectl
+        run: |
+          curl -fsSLo /usr/local/bin/kubectl \
+            "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+          chmod +x /usr/local/bin/kubectl
+
+      - name: Prove live admission enforcement
+        run: bash test/e2e/admission.sh

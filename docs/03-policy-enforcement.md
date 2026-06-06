@@ -25,6 +25,8 @@ C2P generates for both, so the choice of engine is an implementation detail behi
 - Admission (the gate): the admission controller rejects non-compliant resources at deploy time. This is where unsigned images and policy violations are blocked.
 - Runtime (continuous): policies are re-evaluated against live cluster state, so drift and out-of-band changes are detected, not just deploy-time violations.
 
+**Implementation status:** admission and runtime enforcement are proven on a live cluster by a committed, reproducible harness ([`test/e2e/admission.sh`](../test/e2e/admission.sh)), run as a kind-based CI job. It stands up Kyverno, applies the Phase 1 policy library (the image-signature policy excepted — that is Phase 2 and needs Sigstore), and asserts all three: a non-compliant Pod is denied at admission, a compliant Pod is admitted, and Kyverno's background scan produces a PolicyReport that `fabric policy-report` turns into satisfied evidence the ledger accepts and verifies. CI enforcement of manifests before merge is the one enforcement point still to wire.
+
 ## Example: require a signed image
 
 The shipped `verify-image-signatures` policy ([`policies/kyverno/verify-image-signatures.yaml`](../policies/kyverno/verify-image-signatures.yaml)) blocks any image whose Sigstore keyless signature does not chain to the project's trusted CI identity:
