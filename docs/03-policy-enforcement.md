@@ -8,6 +8,8 @@ Compliance-to-Policy (C2P), part of the OSCAL Compass project, bridges controls 
 
 C2P is the hinge of the whole design. It is the reason an auditor can trace a deployed policy back to the control it implements, and trace an assessment result forward to the control it satisfies.
 
+**Implementation status:** C2P is not yet wired in. Today an interim native composer (`fabric generate`) reads the profile and component definitions and composes the deployable Kyverno policy set for the selected controls. The component definitions already follow the OSCAL rule_set convention C2P expects, so the composer is swappable for C2P without changing the control data. The composer only *composes* existing policies; it does not author them.
+
 ## Policy engines
 
 Two engines cover the range of needs:
@@ -23,35 +25,41 @@ C2P generates for both, so the choice of engine is an implementation detail behi
 - Admission (the gate): the admission controller rejects non-compliant resources at deploy time. This is where unsigned images and policy violations are blocked.
 - Runtime (continuous): policies are re-evaluated against live cluster state, so drift and out-of-band changes are detected, not just deploy-time violations.
 
-## Example: require a signed, attested image
+## Example: require a signed image
 
-A Kyverno policy that blocks any image without a valid signature from the trusted build identity:
+The shipped `verify-image-signatures` policy ([`policies/kyverno/verify-image-signatures.yaml`](../policies/kyverno/verify-image-signatures.yaml)) blocks any image whose Sigstore keyless signature does not chain to the project's trusted CI identity:
 
 ```yaml
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: require-signed-images
+  name: verify-image-signatures
   annotations:
-    fabric.control-id: cfr-part-11-system-access-control
+    fabric.control-id: cfr-part-11-10a-system-validation
 spec:
   validationFailureAction: Enforce
+  background: false
   rules:
-    - name: verify-signature
+    - name: verify-signed-images
       match:
         any:
           - resources:
               kinds: ["Pod"]
       verifyImages:
-        - imageReferences: ["registry.example.internal/*"]
+        - imageReferences: ["*"]
+          required: true
+          mutateDigest: true
           attestors:
-            - entries:
+            - count: 1
+              entries:
                 - keyless:
-                    subject: "https://ci.example.internal/build"
-                    issuer: "https://token.actions.example.internal"
+                    subject: "https://github.com/kasjens/ComplianceFabric/.github/workflows/*"
+                    issuer: "https://token.actions.githubusercontent.com"
+                    rekor:
+                      url: https://rekor.sigstore.dev
 ```
 
-The `fabric.control-id` annotation is what lets the evidence layer attribute every allow or deny back to a control.
+Adopters replace the subject and issuer with their own signing identity. The `fabric.control-id` annotation is what lets the evidence layer attribute every allow or deny back to a control.
 
 ## Output
 
