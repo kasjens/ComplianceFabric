@@ -12,7 +12,7 @@ Early open-source project, currently at the documentation and design phase. See 
 
 ## Open-core
 
-The core is open source under Apache 2.0: the framework, policy templates, OSCAL control mappings, integrations, and documentation. A commercial layer is offered separately by Verholm and is not part of this repository: a hosted control plane, polished audit-pack and validation-report generation, certified GxP control packs, and enterprise support. The boundary is described in `GOVERNANCE.md` and the reasoning in `docs/adr/0004-open-core-and-apache-2-0.md`.
+The core is open source under Apache 2.0: the framework, policy templates, OSCAL control mappings, integrations, and documentation. A commercial layer is offered separately by the project's commercial sponsor and is not part of this repository: a hosted control plane, polished audit-pack and validation-report generation, certified GxP control packs, and enterprise support. The boundary is described in `GOVERNANCE.md` and the reasoning in `docs/adr/0004-open-core-and-apache-2-0.md`.
 
 The control logic is open on purpose. A quality team and an auditor can read exactly how a control is enforced and evidenced, which is worth more than a black box that asks to be trusted.
 

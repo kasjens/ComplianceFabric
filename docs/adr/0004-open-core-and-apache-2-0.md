@@ -12,7 +12,7 @@ A fully closed product loses the trust advantage that matters in compliance tool
 
 ## Decision
 
-Adopt an open-core model. License the core under Apache 2.0: the framework, policy templates, OSCAL control mappings, integrations, and documentation. Keep a commercial layer separate, offered by Verholm as the project sponsor: a hosted control plane, polished audit-pack and validation-report generation, certified GxP control packs, and enterprise support.
+Adopt an open-core model. License the core under Apache 2.0: the framework, policy templates, OSCAL control mappings, integrations, and documentation. Keep a commercial layer separate, offered by the project's commercial sponsor: a hosted control plane, polished audit-pack and validation-report generation, certified GxP control packs, and enterprise support.
 
 Use Apache 2.0 rather than a copyleft license because the goal is wide adoption and for the control mappings to become a shared reference. Apache 2.0 is the norm for the projects this builds on (Kubernetes, Kyverno, Sigstore, OSCAL Compass), which lowers friction for contributors and adopters.
 
@@ -22,4 +22,4 @@ Use Apache 2.0 rather than a copyleft license because the goal is wide adoption 
 - Community can contribute control mappings and integrations, which is how the project covers more frameworks than a solo effort could.
 - The commercial layer funds continued development without closing the core. The boundary is stated in `GOVERNANCE.md` so contributors know what they are building.
 - A permissive license allows others, including cloud providers, to host the open core. This is an accepted trade for adoption. If hosting by third parties becomes a real problem, a future ADR can revisit the license for new components.
-- The open core doubles as the strongest funnel for the sponsor's consulting and training, since it makes the maintainers the visible authority on the method.
+- The open core builds the maintainers' visibility and authority on the method, which supports the project's long-term sustainability.

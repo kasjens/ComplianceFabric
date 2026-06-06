@@ -21,7 +21,7 @@ Contributors who submit sound changes over time, review others' work, and engage
 
 The open-source core in this repository is licensed under Apache 2.0 and is governed by this document. It covers the framework, policy templates, OSCAL control mappings, integrations, and documentation.
 
-A commercial layer is offered separately by Verholm, the project's sponsor. It includes a hosted control plane, polished audit-pack and validation-report generation, certified GxP control packs, and enterprise support. The commercial layer is not governed by this document and is not part of this repository.
+A commercial layer is offered separately by the project's commercial sponsor. It includes a hosted control plane, polished audit-pack and validation-report generation, certified GxP control packs, and enterprise support. The commercial layer is not governed by this document and is not part of this repository.
 
 This separation is stated openly so contributors know what they are building and where it sits. Contributions to the open core stay open. The sponsor does not relicense community contributions into closed components. The reasoning is recorded in `docs/adr/0004-open-core-and-apache-2-0.md`.
 
