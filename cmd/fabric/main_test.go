@@ -621,6 +621,196 @@ func TestProvenanceRequiresThreePositionals(t *testing.T) {
 	}
 }
 
+func TestSBOMCleanInventoryAppendsSatisfiedEvidence(t *testing.T) {
+	dir := t.TempDir()
+	sbom := filepath.Join(dir, "sbom.json")
+	writeFixture(t, sbom, `{
+	  "bomFormat": "CycloneDX",
+	  "metadata": {
+	    "timestamp": "2026-06-06T10:00:00Z",
+	    "component": { "name": "registry.example/mes", "version": "1.4.2" }
+	  },
+	  "components": [ { "name": "openssl", "version": "3.0.8" } ]
+	}`)
+	policy := filepath.Join(dir, "policy.json")
+	writeFixture(t, policy, `{"banned":[{"name":"log4j","version":"2.14.1"}]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"sbom", sbom, policy, "cfr-part-11-10a-system-validation", "--ledger", led}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for a clean inventory, got %d:\n%s", code, out.String())
+	}
+	var records []struct {
+		Result string `json:"result"`
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &records); err != nil {
+		t.Fatalf("output is not a JSON array of records: %v\n%s", err, out.String())
+	}
+	if len(records) != 1 || records[0].Result != "satisfied" || records[0].Source != "sbom-content" {
+		t.Fatalf("want 1 satisfied sbom-content record, got %+v", records)
+	}
+	if vcode := run([]string{"ledger", "verify", led}, &bytes.Buffer{}); vcode != 0 {
+		t.Errorf("expected ledger to verify, got exit %d", vcode)
+	}
+}
+
+func TestSBOMBannedComponentExitsNonZero(t *testing.T) {
+	dir := t.TempDir()
+	sbom := filepath.Join(dir, "sbom.json")
+	writeFixture(t, sbom, `{
+	  "metadata": { "timestamp": "2026-06-06T10:00:00Z",
+	    "component": { "name": "registry.example/mes", "version": "1.4.2" } },
+	  "components": [ { "name": "openssl", "version": "3.0.8" } ]
+	}`)
+	policy := filepath.Join(dir, "policy.json")
+	writeFixture(t, policy, `{"banned":[{"name":"openssl","version":"3.0.8"}]}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"sbom", sbom, policy, "cfr-part-11-10a-system-validation"}, &out); code != 1 {
+		t.Fatalf("expected exit 1 for a banned component, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestSBOMRequiresThreePositionals(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"sbom", "only", "two"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
+// driftAppsFixture writes an Argo applications JSON file with the given sync
+// status and returns its path, for use as a collect source's fetch input.
+func driftAppsFixture(t *testing.T, dir, status string) string {
+	t.Helper()
+	p := filepath.Join(dir, "apps-"+status+".json")
+	writeFixture(t, p, `{"items":[{"metadata":{"name":"web"},"status":{"sync":{"status":"`+status+
+		`"},"reconciledAt":"2026-01-01T00:00:00Z"}}]}`)
+	return p
+}
+
+// A single --once tick fetches each configured source via its command, produces
+// evidence, and appends the changes to the ledger, which then verifies.
+func TestCollectOnceAppendsChangesAndVerifies(t *testing.T) {
+	dir := t.TempDir()
+	apps := driftAppsFixture(t, dir, "Synced")
+	cfgPath := filepath.Join(dir, "collect.json")
+	writeFixture(t, cfgPath, `{"interval":"30s","sources":[
+	  {"type":"drift","command":["cat","`+apps+`"],"control":"annex11-11-periodic-evaluation"}
+	]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"collect", cfgPath, "--ledger", led, "--once"}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for a clean one-shot tick, got %d:\n%s", code, out.String())
+	}
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatalf("ledger not written: %v", err)
+	}
+	if !strings.Contains(string(data), "annex11-11-periodic-evaluation") {
+		t.Errorf("ledger missing the collected control:\n%s", string(data))
+	}
+	if vcode := run([]string{"ledger", "verify", led}, &bytes.Buffer{}); vcode != 0 {
+		t.Errorf("expected the collected ledger to verify, got exit %d", vcode)
+	}
+}
+
+// An unchanged second --once tick appends nothing: the ledger keeps exactly the
+// one baseline entry (event-log semantics through the CLI).
+func TestCollectOnceIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	apps := driftAppsFixture(t, dir, "Synced")
+	cfgPath := filepath.Join(dir, "collect.json")
+	writeFixture(t, cfgPath, `{"interval":"30s","sources":[
+	  {"type":"drift","command":["cat","`+apps+`"],"control":"c1"}
+	]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	if code := run([]string{"collect", cfgPath, "--ledger", led, "--once"}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("first tick: expected exit 0, got %d", code)
+	}
+	if code := run([]string{"collect", cfgPath, "--ledger", led, "--once"}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("second tick: expected exit 0, got %d", code)
+	}
+	data, err := os.ReadFile(led)
+	if err != nil {
+		t.Fatalf("ledger not written: %v", err)
+	}
+	if lines := strings.Count(strings.TrimSpace(string(data)), "\n") + 1; lines != 1 {
+		t.Fatalf("expected exactly 1 ledger entry after two unchanged ticks, got %d:\n%s", lines, string(data))
+	}
+}
+
+// A source whose fetch command cannot run does not abort the tick, but the tick
+// reports the failure as a non-zero exit so a broken source is visible.
+func TestCollectReportsSourceFailure(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "collect.json")
+	writeFixture(t, cfgPath, `{"interval":"30s","sources":[
+	  {"type":"drift","command":["this-command-does-not-exist-xyz"],"control":"c1"}
+	]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+
+	var out bytes.Buffer
+	if code := run([]string{"collect", cfgPath, "--ledger", led, "--once"}, &out); code != 1 {
+		t.Fatalf("expected exit 1 when a source fails to fetch, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestCollectRequiresConfigArg(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"collect", "--ledger", "x.jsonl", "--once"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for a missing config arg, got %d", code)
+	}
+}
+
+func TestCollectRequiresLedger(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "collect.json")
+	writeFixture(t, cfgPath, `{"interval":"30s","sources":[]}`)
+	var out bytes.Buffer
+	if code := run([]string{"collect", cfgPath, "--once"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 when --ledger is absent, got %d", code)
+	}
+}
+
+func TestCollectBadConfigExitsTwo(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "collect.json")
+	writeFixture(t, cfgPath, `{"interval":"30s","sources":[{"type":"nope","command":["x"]}]}`)
+	led := filepath.Join(dir, "ledger.jsonl")
+	var out bytes.Buffer
+	if code := run([]string{"collect", cfgPath, "--ledger", led, "--once"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for an unloadable config, got %d:\n%s", code, out.String())
+	}
+}
+
+func TestServeRequiresLedgerArg(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"serve"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for a missing ledger arg, got %d", code)
+	}
+}
+
+func TestServeDanglingAddrIsUsageError(t *testing.T) {
+	var out bytes.Buffer
+	// --addr with no following value is a usage error caught before any listener
+	// binds, so the wiring is exercised without occupying a port.
+	if code := run([]string{"serve", "led.jsonl", "--addr"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for a dangling --addr, got %d", code)
+	}
+}
+
+func TestServeUnreadableLedgerExitsTwo(t *testing.T) {
+	var out bytes.Buffer
+	// A ledger path that is a directory cannot be read as a ledger; this is caught
+	// up front (before any listener binds) so the test never occupies a port.
+	if code := run([]string{"serve", t.TempDir(), "--addr", ":0"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for an unreadable ledger, got %d:\n%s", code, out.String())
+	}
+}
+
 func TestUsageOnBadArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run(nil, &out); code != 2 {
@@ -712,6 +902,41 @@ func TestTraceRequiresThreePositionalArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run([]string{"trace", "only", "two"}, &out); code != 2 {
 		t.Fatalf("expected exit 2 for missing args, got %d", code)
+	}
+}
+
+func TestGatewayRequiresRegistryArg(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"gateway"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for missing registry arg, got %d", code)
+	}
+}
+
+func TestGatewayUnknownFlagValueIsUsageError(t *testing.T) {
+	var out bytes.Buffer
+	// --addr with no following value is a usage error caught before any listener
+	// is bound, so the wiring is exercised without occupying a port.
+	if code := run([]string{"gateway", "reg", "--addr"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for dangling --addr, got %d", code)
+	}
+}
+
+func TestGatewayUncompilableGuardrailExitsTwo(t *testing.T) {
+	dir := t.TempDir()
+	// A clean registry so loading succeeds and the failure is unambiguously the
+	// guardrail policy, not the registry.
+	writeFixture(t, filepath.Join(dir, "agents", "a.json"),
+		`{"id":"a","version":"1.0.0","owner":"o","prompts":["p"],"tools":["t"]}`)
+	writeFixture(t, filepath.Join(dir, "prompts", "p.json"), `{"id":"p","version":"1.0.0","text":"hi"}`)
+	writeFixture(t, filepath.Join(dir, "tools", "t.json"), `{"id":"t","version":"1.0.0","description":"a tool"}`)
+	guardrail := filepath.Join(dir, "guardrail.json")
+	writeFixture(t, guardrail, `{"rules":[{"name":"broken","pattern":"("}]}`)
+
+	var out bytes.Buffer
+	// An uncompilable guardrail is rejected before the listener binds, so this
+	// never occupies a port.
+	if code := run([]string{"gateway", dir, "--guardrail", guardrail, "--addr", ":0"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for an uncompilable guardrail, got %d:\n%s", code, out.String())
 	}
 }
 

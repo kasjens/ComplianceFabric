@@ -55,6 +55,19 @@ func TestFromProvenanceTrustedBuilderSatisfied(t *testing.T) {
 	}
 }
 
+// A provenance record references the built artifact by its content digest, so a
+// reviewer can pivot from the evidence to the exact artifact (and its
+// transparency-log entry).
+func TestFromProvenanceCarriesArtifactDigest(t *testing.T) {
+	records, err := FromProvenance([]byte(slsaStatement), trustedBuilder, "cfr-part-11-10a-system-validation")
+	if err != nil {
+		t.Fatalf("FromProvenance: %v", err)
+	}
+	if records[0].ArtifactRef != "sha256:1f2e3d4c5b6a7980" {
+		t.Errorf("artifact-ref = %q, want sha256:1f2e3d4c5b6a7980", records[0].ArtifactRef)
+	}
+}
+
 func TestFromProvenanceUntrustedBuilderNotSatisfied(t *testing.T) {
 	records, err := FromProvenance([]byte(slsaStatement), "https://evil.example/builder", "cfr-part-11-10a-system-validation")
 	if err != nil {

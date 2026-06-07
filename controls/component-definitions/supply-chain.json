@@ -7,12 +7,16 @@
     {
       "title": "supply-chain",
       "type": "process",
-      "description": "Build pipeline that signs a SLSA provenance attestation for every released artifact, so a deployed image can be tied back to the trusted build that produced it.",
+      "description": "Build pipeline that signs a SLSA provenance attestation and an SBOM for every released artifact, so a deployed image can be tied back to the trusted build that produced it and the components it contains can be inspected.",
       "props": [
         { "name": "Rule_Id", "value": "build-provenance", "remarks": "rule_set_00" },
         { "name": "Rule_Description", "value": "Every released artifact carries a SLSA provenance attestation from the trusted build pipeline.", "remarks": "rule_set_00" },
         { "name": "Check_Id", "value": "provenance-attestation", "remarks": "rule_set_00" },
-        { "name": "Check_Description", "value": "fabric provenance verifies a SLSA build-provenance attestation names the expected trusted builder, tying the artifact to its build.", "remarks": "rule_set_00" }
+        { "name": "Check_Description", "value": "fabric provenance verifies a SLSA build-provenance attestation names the expected trusted builder, tying the artifact to its build.", "remarks": "rule_set_00" },
+        { "name": "Rule_Id", "value": "sbom-content", "remarks": "rule_set_01" },
+        { "name": "Rule_Description", "value": "Every released artifact carries an SBOM whose component inventory contains no prohibited component.", "remarks": "rule_set_01" },
+        { "name": "Check_Id", "value": "sbom-inventory", "remarks": "rule_set_01" },
+        { "name": "Check_Description", "value": "fabric sbom checks a CycloneDX SBOM inventories the image's components and carries none banned by policy, so what is inside a deployed image is known and screened.", "remarks": "rule_set_01" }
       ],
       "control-implementations": [
         {
@@ -24,6 +28,13 @@
               "description": "The ability to discern altered records: a SLSA provenance attestation ties each deployed artifact to the trusted pipeline that built it, so an artifact built outside that pipeline is detectable.",
               "props": [
                 { "name": "Rule_Id", "value": "build-provenance" }
+              ]
+            },
+            {
+              "control-id": "cfr-part-11-10a-system-validation",
+              "description": "The ability to discern altered records: an SBOM inventories the components inside each deployed artifact and screens them against a prohibited-component policy, so an image carrying a banned component is detectable.",
+              "props": [
+                { "name": "Rule_Id", "value": "sbom-content" }
               ]
             }
           ]

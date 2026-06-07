@@ -8,11 +8,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"os/exec"
+	"time"
 
 	"github.com/kasjens/ComplianceFabric/internal/assess"
+	"github.com/kasjens/ComplianceFabric/internal/collect"
+	"github.com/kasjens/ComplianceFabric/internal/dashboard"
 	"github.com/kasjens/ComplianceFabric/internal/eval"
 	"github.com/kasjens/ComplianceFabric/internal/evidence"
+	"github.com/kasjens/ComplianceFabric/internal/gateway"
 	"github.com/kasjens/ComplianceFabric/internal/generate"
 	"github.com/kasjens/ComplianceFabric/internal/ledger"
 	"github.com/kasjens/ComplianceFabric/internal/loader"
@@ -38,8 +44,12 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric trace <traces-json-file> <registry-dir> <control-id> [--ledger <path>]\n" +
 	"       fabric eval-gate <eval-run-file> <gate-file> <control-id> [--ledger <path>]\n" +
 	"       fabric provenance <provenance-json-file> <expected-builder-id> <control-id> [--ledger <path>]\n" +
+	"       fabric sbom <sbom-json-file> <policy-file> <control-id> [--ledger <path>]\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>\n" +
-	"       fabric registry validate <registry-dir>"
+	"       fabric registry validate <registry-dir>\n" +
+	"       fabric gateway <registry-dir> [--addr <addr>] [--log <path>] [--guardrail <policy-file>]\n" +
+	"       fabric collect <config-file> --ledger <path> [--once]\n" +
+	"       fabric serve <ledger-path> [--addr <addr>]"
 
 // run executes the CLI and returns the process exit code:
 //
@@ -47,7 +57,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "ledger": true, "registry": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "collect": true, "serve": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -55,7 +65,11 @@ func run(args []string, out io.Writer) int {
 	cmd := args[0]
 
 	strict := false
+	once := false
 	ledgerPath := ""
+	addr := ""
+	logPath := ""
+	guardrailPath := ""
 	var positional []string
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -63,13 +77,36 @@ func run(args []string, out io.Writer) int {
 		switch {
 		case cmd == "assess" && a == "--strict":
 			strict = true
-		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance") && a == "--ledger":
+		case cmd == "collect" && a == "--once":
+			once = true
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance" || cmd == "sbom" || cmd == "collect") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
 			}
 			i++
 			ledgerPath = rest[i]
+		case (cmd == "gateway" || cmd == "serve") && a == "--addr":
+			if i+1 >= len(rest) {
+				fmt.Fprintln(out, usage)
+				return 2
+			}
+			i++
+			addr = rest[i]
+		case cmd == "gateway" && a == "--log":
+			if i+1 >= len(rest) {
+				fmt.Fprintln(out, usage)
+				return 2
+			}
+			i++
+			logPath = rest[i]
+		case cmd == "gateway" && a == "--guardrail":
+			if i+1 >= len(rest) {
+				fmt.Fprintln(out, usage)
+				return 2
+			}
+			i++
+			guardrailPath = rest[i]
 		default:
 			positional = append(positional, a)
 		}
@@ -144,6 +181,57 @@ func run(args []string, out io.Writer) int {
 			return 2
 		}
 		return runProvenance(positional[0], positional[1], positional[2], ledgerPath, out)
+	}
+
+	// gateway runs the inline runtime admission point: it serves the same
+	// qualified-surface decision that trace evaluates after the fact, but at
+	// request time, and appends every handled interaction to a log the trace
+	// producer can consume.
+	if cmd == "gateway" {
+		if len(positional) != 1 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		if addr == "" {
+			addr = ":8080"
+		}
+		return runGateway(positional[0], addr, logPath, guardrailPath, out)
+	}
+
+	// collect runs the continuous collector: it polls every configured source,
+	// produces evidence, and appends only the state changes to the ledger. --once
+	// runs a single tick (so it is testable and CI-driveable); without it the
+	// collector loops on the config's interval until the process is stopped.
+	if cmd == "collect" {
+		if len(positional) != 1 || ledgerPath == "" {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runCollect(positional[0], ledgerPath, once, out)
+	}
+
+	// serve runs the live posture dashboard: a read-only HTTP surface over the
+	// ledger's control-posture rollup that re-reads the ledger on every request,
+	// so it reflects what the collector is appending in real time.
+	if cmd == "serve" {
+		if len(positional) != 1 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		if addr == "" {
+			addr = ":8081"
+		}
+		return runServe(positional[0], addr, out)
+	}
+
+	// sbom turns a CycloneDX SBOM into evidence keyed to the given control,
+	// judging the image's component inventory against a banned-components policy.
+	if cmd == "sbom" {
+		if len(positional) != 3 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runSBOM(positional[0], positional[1], positional[2], ledgerPath, out)
 	}
 
 	// registry validate checks an agent/prompt/tool registry directory for
@@ -274,7 +362,7 @@ func runPolicyReport(reportFile, policiesDir, ledgerPath string, out io.Writer) 
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
-	records, err := evidence.FromPolicyReport(data, policyControls)
+	records, err := collect.Run("policy-report", data, collect.Params{PolicyControls: policyControls})
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
@@ -288,7 +376,7 @@ func runDrift(appsFile, controlID, ledgerPath string, out io.Writer) int {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
-	records, err := evidence.FromArgoApplications(data, controlID)
+	records, err := collect.Run("drift", data, collect.Params{ControlID: controlID})
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
@@ -395,7 +483,7 @@ func runEvalGate(runFile, gateFile, controlID, ledgerPath string, out io.Writer)
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
-	records, err := evidence.FromEvalGate(runData, gate, controlID)
+	records, err := collect.Run("eval-gate", runData, collect.Params{Gate: gate, ControlID: controlID})
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
@@ -409,7 +497,31 @@ func runProvenance(provenanceFile, expectedBuilder, controlID, ledgerPath string
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
-	records, err := evidence.FromProvenance(data, expectedBuilder, controlID)
+	records, err := collect.Run("provenance", data, collect.Params{ExpectedBuilder: expectedBuilder, ControlID: controlID})
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return emitRecords(records, ledgerPath, out)
+}
+
+func runSBOM(sbomFile, policyFile, controlID, ledgerPath string, out io.Writer) int {
+	sbomData, err := os.ReadFile(sbomFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	policyData, err := os.ReadFile(policyFile)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	var policy evidence.SBOMPolicy
+	if err := json.Unmarshal(policyData, &policy); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := collect.Run("sbom", sbomData, collect.Params{SBOMPolicy: policy, ControlID: controlID})
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
@@ -428,12 +540,155 @@ func runTrace(tracesFile, registryDir, controlID, ledgerPath string, out io.Writ
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
-	records, err := evidence.FromAgentTraces(data, reg, controlID)
+	records, err := collect.Run("trace", data, collect.Params{Registry: reg, ControlID: controlID})
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}
 	return emitRecords(records, ledgerPath, out)
+}
+
+// runGateway loads the agent registry, opens the optional interaction log for
+// appending, and serves the inline gateway until the process is stopped. This is
+// the irreducible network shell over the TDD-covered gateway.Server: the
+// admission decision and the log shape it writes are exercised by unit tests, so
+// this function only wires inputs to ListenAndServe.
+func runGateway(registryDir, addr, logPath, guardrailPath string, out io.Writer) int {
+	reg, err := registry.Load(registryDir)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+
+	// A bad guardrail policy is caught here, before the listener binds, so the
+	// gateway never starts serving with an unparseable or uncompilable policy.
+	var guard gateway.Guardrail
+	if guardrailPath != "" {
+		policyData, err := os.ReadFile(guardrailPath)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+		var policy gateway.GuardrailPolicy
+		if err := json.Unmarshal(policyData, &policy); err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+		guard, err = gateway.CompileGuardrail(policy)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+	}
+
+	var logw io.Writer
+	if logPath != "" {
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+		defer f.Close()
+		logw = f
+	}
+
+	srv := &gateway.Server{Registry: reg, Guardrail: guard, Log: logw}
+	fmt.Fprintf(out, "agent gateway listening on %s (registry %s", addr, registryDir)
+	if guardrailPath != "" {
+		fmt.Fprintf(out, ", guardrail %s", guardrailPath)
+	}
+	if logPath != "" {
+		fmt.Fprintf(out, ", log %s", logPath)
+	}
+	fmt.Fprintln(out, ")")
+	if err := http.ListenAndServe(addr, srv); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return 0
+}
+
+// runCollect loads a declarative collection config and drives the collector. The
+// config validation (types, commands, aux files) happens in collect.LoadConfig,
+// so a bad config fails here before any tick. With once it runs a single tick and
+// returns; otherwise it loops on the configured interval. The collector's logic
+// (fetch, produce, dedup, append) is TDD-covered; this shell only wires process
+// execution (the fetch commands) and the time-driven loop, the two irreducibly
+// untestable edges.
+func runCollect(configPath, ledgerPath string, once bool, out io.Writer) int {
+	cfg, err := collect.LoadConfig(configPath)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+
+	c := &collect.Collector{
+		Sources: cfg.Sources,
+		Ledger:  ledger.Open(ledgerPath),
+		Fetch:   execFetch,
+	}
+
+	if once {
+		changed, err := c.Tick()
+		return reportTick(changed, err, out)
+	}
+
+	fmt.Fprintf(out, "collector started: %d source(s), interval %s, ledger %s\n",
+		len(cfg.Sources), cfg.Interval, ledgerPath)
+	ticker := time.NewTicker(cfg.Interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		// In daemon mode a tick's outcome is reported but never aborts the loop: a
+		// broken source degrades collection rather than stopping it.
+		changed, err := c.Tick()
+		reportTick(changed, err, out)
+	}
+	return 0
+}
+
+// reportTick prints a tick's recorded changes and any per-source warnings. It
+// returns exit 1 when the tick reported an error (so a single --once run surfaces
+// a broken source) and 0 otherwise.
+func reportTick(changed []evidence.Record, err error, out io.Writer) int {
+	fmt.Fprintf(out, "tick: %d change(s) recorded\n", len(changed))
+	for _, r := range changed {
+		fmt.Fprintf(out, "  [%s] %s %s\n", r.Result, r.ControlID, r.Subject)
+	}
+	if err != nil {
+		fmt.Fprintf(out, "tick warnings: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// execFetch obtains a source's raw input by running its fetch command and
+// capturing stdout. This is the production Fetcher injected into the collector;
+// the collector's tests inject an in-memory fetcher instead.
+func execFetch(command []string) ([]byte, error) {
+	return exec.Command(command[0], command[1:]...).Output()
+}
+
+// runServe runs the live posture dashboard. The dashboard handler re-reads the
+// ledger on every request (via ledgerRecords) so the page stays current as the
+// collector appends; this shell validates the ledger is readable up front - so a
+// bad path fails before the listener binds rather than on the first request - then
+// serves until the process is stopped. ListenAndServe is the only untested edge;
+// the rendering is covered in internal/dashboard.
+func runServe(ledgerPath, addr string, out io.Writer) int {
+	if _, err := ledgerRecords(ledgerPath); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+
+	h := dashboard.Handler{
+		Source: func() ([]evidence.Record, error) { return ledgerRecords(ledgerPath) },
+	}
+	fmt.Fprintf(out, "posture dashboard listening on %s (ledger %s)\n", addr, ledgerPath)
+	if err := http.ListenAndServe(addr, h); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return 0
 }
 
 func runRegistryValidate(dir string, out io.Writer) int {

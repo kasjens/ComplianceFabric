@@ -53,12 +53,18 @@ func (r ChangeRecord) Issues() []string {
 // model in docs/07-evidence-and-audit.md. It carries the embedded change record
 // as the raw evidence behind the result.
 type Record struct {
-	ControlID  string        `json:"control-id"`
-	Subject    string        `json:"subject"`
-	Result     string        `json:"result"`
-	ObservedAt time.Time     `json:"observed-at"`
-	Source     string        `json:"source"`
-	Change     *ChangeRecord `json:"change,omitempty"`
+	ControlID  string    `json:"control-id"`
+	Subject    string    `json:"subject"`
+	Result     string    `json:"result"`
+	ObservedAt time.Time `json:"observed-at"`
+	Source     string    `json:"source"`
+	// ArtifactRef, when set, points at the artifact this record concerns by its
+	// content digest (for example "sha256:1f2e..."). It lets a reviewer pivot from
+	// an evidence record to the exact built artifact - and, since the digest is
+	// what a transparency log (Rekor) indexes, to that artifact's transparency-log
+	// entry. Records that do not concern a specific artifact leave it empty.
+	ArtifactRef string        `json:"artifact-ref,omitempty"`
+	Change      *ChangeRecord `json:"change,omitempty"`
 }
 
 // AsEvidence turns a change-control record into an evidence-ledger entry for the

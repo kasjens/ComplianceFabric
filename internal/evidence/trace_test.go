@@ -86,3 +86,77 @@ func TestFromAgentTracesMalformedJSONIsError(t *testing.T) {
 		t.Fatal("expected error for malformed JSON")
 	}
 }
+
+// The inline gateway writes its interaction log as JSON Lines (one object per
+// line), not the {"traces":[...]} envelope. FromAgentTraces must consume that
+// shape too, so what the gateway enforced inline rolls up as evidence with no
+// reshaping step.
+func TestFromAgentTracesAcceptsGatewayJSONLines(t *testing.T) {
+	log := `{"id":"t1","agent":"release-reviewer","prompt":"change-control-review","tools":["gh-pr-read"],"timestamp":"2026-06-06T09:14:00Z","allowed":true}
+{"id":"t2","agent":"rogue-agent","prompt":"x","tools":[],"timestamp":"2026-06-06T09:15:00Z","allowed":false,"reason":"agent rogue-agent is not registered"}`
+	records, err := FromAgentTraces([]byte(log), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 records, got %d", len(records))
+	}
+	if records[0].Result != oscal.StatusSatisfied {
+		t.Errorf("record 0: expected satisfied, got %q", records[0].Result)
+	}
+	if records[0].Subject != "agent/release-reviewer/trace/t1" {
+		t.Errorf("record 0: unexpected subject %q", records[0].Subject)
+	}
+	if records[1].Result != oscal.StatusNotSatisfied {
+		t.Errorf("record 1: expected not-satisfied, got %q", records[1].Result)
+	}
+}
+
+// A gateway can block an interaction on content (a guardrail match) even when the
+// agent, prompt, and tools are all qualified. The gateway records that block as
+// allowed:false in its log. Evidence must honor that recorded verdict: a request
+// the gateway actually blocked must not roll up as satisfied just because it would
+// have passed the registration check. Otherwise guardrail enforcement is invisible
+// to the audit trail.
+func TestFromAgentTracesHonorsRecordedGuardrailBlock(t *testing.T) {
+	log := `{"id":"t1","agent":"release-reviewer","prompt":"change-control-review","tools":["gh-pr-read"],"timestamp":"2026-06-06T09:14:00Z","allowed":false,"reason":"content blocked by guardrail aws-secret-key"}`
+	records, err := FromAgentTraces([]byte(log), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].Result != oscal.StatusNotSatisfied {
+		t.Errorf("a gateway-blocked interaction must be not-satisfied, got %q", records[0].Result)
+	}
+}
+
+// A trace with no recorded verdict (the {"traces":[...]} envelope an OTel pipeline
+// produces) carries no allowed field, so it must still be judged by the registry
+// surface rather than defaulting to blocked.
+func TestFromAgentTracesWithoutVerdictIsJudgedByRegistry(t *testing.T) {
+	traces := `{"traces":[
+		{"id":"t1","agent":"release-reviewer","prompt":"change-control-review","tools":["gh-pr-read"],"timestamp":"2026-06-06T09:14:00Z"}
+	]}`
+	records, err := FromAgentTraces([]byte(traces), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 1 || records[0].Result != oscal.StatusSatisfied {
+		t.Fatalf("expected one satisfied record, got %v", records)
+	}
+}
+
+// Blank lines in a JSON-lines log (e.g. a trailing newline) must be skipped, not
+// treated as malformed records.
+func TestFromAgentTracesSkipsBlankJSONLines(t *testing.T) {
+	log := "\n{\"id\":\"t1\",\"agent\":\"release-reviewer\",\"prompt\":\"change-control-review\",\"tools\":[\"gh-pr-read\"],\"timestamp\":\"2026-06-06T09:14:00Z\"}\n\n"
+	records, err := FromAgentTraces([]byte(log), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+}

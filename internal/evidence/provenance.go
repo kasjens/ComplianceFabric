@@ -63,15 +63,18 @@ func FromProvenance(provenanceJSON []byte, expectedBuilder, controlID string) ([
 	var records []Record
 	for _, sub := range stmt.Subject {
 		subject := "image/" + sub.Name
+		artifactRef := ""
 		if sub.Digest.SHA256 != "" {
 			subject = fmt.Sprintf("image/%s@sha256:%s", sub.Name, sub.Digest.SHA256)
+			artifactRef = "sha256:" + sub.Digest.SHA256
 		}
 		records = append(records, Record{
-			ControlID:  controlID,
-			Subject:    subject,
-			Result:     status,
-			ObservedAt: observedAt.UTC(),
-			Source:     "slsa-provenance",
+			ControlID:   controlID,
+			Subject:     subject,
+			Result:      status,
+			ObservedAt:  observedAt.UTC(),
+			Source:      "slsa-provenance",
+			ArtifactRef: artifactRef,
 		})
 	}
 	return records, nil
