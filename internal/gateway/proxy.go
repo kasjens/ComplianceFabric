@@ -209,14 +209,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// unguarded proxy sets no ModifyResponse and streams the response through
 	// untouched.
 	if p.Guardrail.active() {
-		rp.ModifyResponse = func(resp *http.Response) error {
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return err
-			}
-			_ = resp.Body.Close()
-
-			decision := p.Guardrail.Screen(string(body))
+		logOutput := func(decision Decision) {
 			writeLogLine(p.Log, &p.mu, clock(p.Now), logEntry{
 				ID:      req.ID,
 				Agent:   req.Agent,
@@ -226,6 +219,30 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				Allowed: decision.Allowed,
 				Reason:  decision.Reason,
 			})
+		}
+		rp.ModifyResponse = func(resp *http.Response) error {
+			// A streamed (Server-Sent Events) response is screened incrementally:
+			// each event is released to the agent only after it passes the
+			// guardrail, and the stream is cut at the first event a rule catches,
+			// so the proxy buffers one event rather than the whole response. The
+			// status line has already gone out as the upstream's 200, so a block
+			// here truncates the stream before the offending event rather than
+			// turning into a 403 — the secret still never reaches the agent.
+			if isEventStream(resp) {
+				resp.Body = &screeningReader{src: resp.Body, guard: p.Guardrail, logOutput: logOutput}
+				return nil
+			}
+
+			// A non-streamed response is buffered and screened whole, so a dirty
+			// body can be replaced with a 403 before any of it reaches the agent.
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			_ = resp.Body.Close()
+
+			decision := p.Guardrail.Screen(string(body))
+			logOutput(decision)
 
 			if !decision.Allowed {
 				// Replace the secret-bearing response with the Decision and a
@@ -250,3 +267,106 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rp.ServeHTTP(w, r)
 }
+
+// isEventStream reports whether the response is a Server-Sent Events stream, the
+// shape a model uses to deliver a completion token by token. Such a response is
+// screened event by event rather than buffered whole.
+func isEventStream(resp *http.Response) bool {
+	return strings.HasPrefix(strings.TrimSpace(resp.Header.Get("Content-Type")), "text/event-stream")
+}
+
+// screeningReader screens a streamed (SSE) response body incrementally. It reads
+// from the upstream, splits the stream on SSE event boundaries (a blank line),
+// and releases an event to the agent only once it passes the guardrail; at the
+// first event a rule catches it cuts the stream — the dirty event and everything
+// after it are withheld — and records the verdict exactly once. It buffers at
+// most one in-flight event, so a long response is screened as it flows rather
+// than held whole. A clean stream is forwarded unchanged and logged as allowed
+// when it ends.
+type screeningReader struct {
+	src       io.ReadCloser
+	guard     Guardrail
+	logOutput func(Decision)
+
+	pending []byte // bytes read from the upstream not yet split into an event
+	ready   []byte // screened-clean bytes ready to hand to the agent
+	done    bool   // no more bytes will be released (clean EOF or a block)
+	blocked bool   // a rule fired; the stream is cut
+	logged  bool   // the single output verdict has been recorded
+}
+
+func (s *screeningReader) Read(p []byte) (int, error) {
+	for len(s.ready) == 0 && !s.done {
+		buf := make([]byte, 4096)
+		n, err := s.src.Read(buf)
+		if n > 0 {
+			s.pending = append(s.pending, buf[:n]...)
+			s.drain(false)
+		}
+		if err != nil {
+			if err == io.EOF {
+				s.drain(true) // screen the final, unterminated event
+				s.finish()
+				break
+			}
+			return 0, err
+		}
+	}
+	if len(s.ready) > 0 {
+		n := copy(p, s.ready)
+		s.ready = s.ready[n:]
+		return n, nil
+	}
+	return 0, io.EOF
+}
+
+// drain screens every complete SSE event currently buffered, appending clean
+// events to ready and stopping at the first dirty one. When final is set the
+// trailing bytes (an event with no terminating blank line) are screened too.
+func (s *screeningReader) drain(final bool) {
+	const sep = "\n\n"
+	for !s.done {
+		idx := bytes.Index(s.pending, []byte(sep))
+		if idx < 0 {
+			break
+		}
+		event := s.pending[:idx+len(sep)]
+		s.pending = s.pending[idx+len(sep):]
+		s.screen(event)
+	}
+	if final && !s.done && len(s.pending) > 0 {
+		s.screen(s.pending)
+		s.pending = nil
+	}
+}
+
+// screen releases a clean event to the agent, or blocks the stream on the first
+// event a rule catches.
+func (s *screeningReader) screen(event []byte) {
+	if d := s.guard.Screen(string(event)); !d.Allowed {
+		s.blocked = true
+		s.done = true
+		s.log(d)
+		return
+	}
+	s.ready = append(s.ready, event...)
+}
+
+// finish records a clean stream's allowed verdict once it reaches EOF without a
+// block.
+func (s *screeningReader) finish() {
+	s.done = true
+	if !s.blocked {
+		s.log(Decision{Allowed: true})
+	}
+}
+
+func (s *screeningReader) log(d Decision) {
+	if s.logged {
+		return
+	}
+	s.logged = true
+	s.logOutput(d)
+}
+
+func (s *screeningReader) Close() error { return s.src.Close() }

@@ -327,6 +327,112 @@ func TestProxyForwardsCleanUpstreamResponse(t *testing.T) {
 	}
 }
 
+// newStreamingUpstream is a fake LLM endpoint that streams the given SSE events
+// (each already carrying its own framing), flushing after each so the proxy sees
+// them arrive incrementally rather than as one buffered body.
+func newStreamingUpstream(t *testing.T, events []string) *url.URL {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		for _, e := range events {
+			_, _ = io.WriteString(w, e)
+			if flusher != nil {
+				flusher.Flush()
+			}
+		}
+	}))
+	t.Cleanup(srv.Close)
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse upstream url: %v", err)
+	}
+	return u
+}
+
+func awsSecretGuardrail(t *testing.T) Guardrail {
+	t.Helper()
+	guard, err := CompileGuardrail(GuardrailPolicy{Rules: []GuardrailRule{
+		{Name: "aws-secret-key", Pattern: `AKIA[0-9A-Z]{16}`},
+	}})
+	if err != nil {
+		t.Fatalf("CompileGuardrail: %v", err)
+	}
+	return guard
+}
+
+// A clean streamed (SSE) response passes through unchanged: every event reaches
+// the agent and a passing phase:"output" verdict is recorded. This is the
+// streaming counterpart to TestProxyForwardsCleanUpstreamResponse.
+func TestProxyStreamsCleanSSEResponseUnchanged(t *testing.T) {
+	var logBuf bytes.Buffer
+	events := []string{"data: PR 42 is clean\n\n", "data: still clean\n\n", "data: [DONE]\n\n"}
+	p := &Proxy{
+		Registry:  gatewayRegistry(),
+		Guardrail: awsSecretGuardrail(t),
+		Upstream:  newStreamingUpstream(t, events),
+		Log:       &logBuf,
+		Now:       func() time.Time { return at(0) },
+	}
+
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, proxyRequest("release-reviewer", "change-control-review", cleanChatBody))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if want := strings.Join(events, ""); rec.Body.String() != want {
+		t.Errorf("streamed body = %q, want the clean events unchanged %q", rec.Body.String(), want)
+	}
+	if out := findLogPhase(t, logBuf.String(), "output"); !out.Allowed {
+		t.Errorf("output log = %+v, want allowed", out)
+	}
+}
+
+// The discriminating case for incremental screening: a secret appears partway
+// through a stream. The clean events before it have already reached the agent,
+// the secret-bearing event and everything after it are cut, the secret never
+// reaches the agent, and a blocked phase:"output" verdict is logged without
+// leaking it. A buffer-the-whole-body screen would instead drop the clean
+// leading events too (replacing all of them with a single 403), so this test
+// fails unless the proxy screens the stream event by event.
+func TestProxyCutsStreamedResponseAtFirstSecretEvent(t *testing.T) {
+	var logBuf bytes.Buffer
+	events := []string{
+		"data: PR 42 looks clean\n\n",
+		"data: here is the deploy key AKIAIOSFODNN7EXAMPLE\n\n",
+		"data: trailing event after the secret\n\n",
+	}
+	p := &Proxy{
+		Registry:  gatewayRegistry(),
+		Guardrail: awsSecretGuardrail(t),
+		Upstream:  newStreamingUpstream(t, events),
+		Log:       &logBuf,
+		Now:       func() time.Time { return at(0) },
+	}
+
+	rec := httptest.NewRecorder()
+	p.ServeHTTP(rec, proxyRequest("release-reviewer", "change-control-review", cleanChatBody))
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "PR 42 looks clean") {
+		t.Errorf("the clean leading event should have streamed to the agent: %q", body)
+	}
+	if strings.Contains(body, "AKIAIOSFODNN7EXAMPLE") {
+		t.Errorf("the secret-bearing event reached the agent: %q", body)
+	}
+	if strings.Contains(body, "trailing event after the secret") {
+		t.Errorf("events after the secret should have been cut: %q", body)
+	}
+	if strings.Contains(logBuf.String(), "AKIAIOSFODNN7EXAMPLE") {
+		t.Errorf("the proxy log leaked the screened output: %q", logBuf.String())
+	}
+	out := findLogPhase(t, logBuf.String(), "output")
+	if out.Allowed || !strings.Contains(out.Reason, "guardrail") {
+		t.Errorf("output log = %+v, want a guardrail denial", out)
+	}
+}
+
 func TestProxyRejectsRequestWithoutIdentity(t *testing.T) {
 	hits := 0
 	p := &Proxy{Registry: gatewayRegistry(), Upstream: newUpstream(t, &hits)}
