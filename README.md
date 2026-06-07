@@ -8,7 +8,14 @@ The Fabric targets life sciences first (GxP) and extends to other regulated sect
 
 ## Status
 
-Early open-source project, currently at the documentation and design phase. See [`ROADMAP.md`](ROADMAP.md) for what comes next, and [`CONTRIBUTING.md`](CONTRIBUTING.md) if you want to help build it.
+Active development. The core is a standard-library-only Go CLI (`fabric`), built test-first, that already runs the continuous-compliance loop end to end:
+
+- **Control authoring, policy, and enforcement (Phase 1, done).** OSCAL catalogs (EU GMP Annex 11, 21 CFR Part 11), a pharma MES baseline profile, and a native composer (`fabric generate`) that compiles the selected controls into a Kyverno policy library with `fabric.control-id` traceability. Admission and runtime enforcement are proven on a live kind cluster in CI.
+- **Trusted delivery (Phase 2, done).** SBOM and SLSA provenance evidence producers, Sigstore keyless signature verification at admission, GitOps change-control evidence, and a release evidence gate (`fabric release-gate`) that binds SBOM/provenance generation into the release pipeline. Proven end to end with syft and cosign in CI.
+- **Evidence and reporting (Phase 3, done).** A hash-chained, append-only evidence ledger; seven evidence producers feeding it; OSCAL assessment-results and a control-posture rollup with a live dashboard; and a continuous collector that polls sources and records only state changes.
+- **AI agent governance (Phase 4, in progress).** A versioned agent/prompt/tool registry, an inline gateway that admits or blocks agent interactions at request time (content guardrails, a model allow-list, and input/output screening), pre-promotion evaluation gates, and interaction tracing that ingests the gateway log and OpenTelemetry OTLP/JSON. Live LLM/MCP traffic proxying and rate/cost limits are still to come.
+
+Next is Phase 5: cross-sector crosswalk profiles (for example DORA and NIS2). See [`ROADMAP.md`](ROADMAP.md) for detail, [`CHANGELOG.md`](CHANGELOG.md) for recent changes, and [`CONTRIBUTING.md`](CONTRIBUTING.md) if you want to help build it.
 
 ## Open-core
 
