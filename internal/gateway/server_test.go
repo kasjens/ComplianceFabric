@@ -232,6 +232,93 @@ func TestServerScreensOutput(t *testing.T) {
 	})
 }
 
+// The limiter is the third gate: a registered agent running a declared prompt
+// with clean input is still blocked once it exhausts its per-window budget, and
+// the block is recorded in the interaction log like any other denial.
+func TestServerEnforcesRateLimit(t *testing.T) {
+	fixed := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	var logBuf bytes.Buffer
+	srv := &Server{
+		Registry: gatewayRegistry(),
+		Limiter:  NewLimiter(map[string]Limits{"release-reviewer": {MaxRequests: 1, Window: time.Minute}}),
+		Log:      &logBuf,
+		Now:      func() time.Time { return fixed },
+	}
+
+	body := `{"id":"r1","agent":"release-reviewer","prompt":"change-control-review","tools":["gh-pr-read"]}`
+	post := func() *httptest.ResponseRecorder {
+		rec := httptest.NewRecorder()
+		srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/decide", strings.NewReader(body)))
+		return rec
+	}
+
+	// First request fits the budget.
+	if rec := post(); rec.Code != http.StatusOK {
+		t.Fatalf("first request status = %d, want %d", rec.Code, http.StatusOK)
+	}
+
+	// Second request in the same window exceeds the request budget.
+	rec := post()
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("second request status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	var dec Decision
+	if err := json.Unmarshal(rec.Body.Bytes(), &dec); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if dec.Allowed {
+		t.Errorf("Allowed = true, want false (rate limit exceeded)")
+	}
+	if !strings.Contains(dec.Reason, "rate") {
+		t.Errorf("Reason = %q, want a rate-limit reason", dec.Reason)
+	}
+
+	// Both interactions are logged; the second records the block.
+	lines := strings.Split(strings.TrimSpace(logBuf.String()), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 log lines, got %d: %q", len(lines), logBuf.String())
+	}
+	var last struct {
+		Allowed bool `json:"allowed"`
+	}
+	if err := json.Unmarshal([]byte(lines[1]), &last); err != nil {
+		t.Fatalf("decode log line: %v", err)
+	}
+	if last.Allowed {
+		t.Errorf("second log line Allowed = true, want false")
+	}
+}
+
+// A request that fails an earlier gate (registry or guardrail) must not consume
+// limiter budget: the limiter only charges interactions that would otherwise be
+// admitted, so a blocked request cannot exhaust a budget that a later valid one
+// needs.
+func TestServerLimiterChargesOnlyAdmittedRequests(t *testing.T) {
+	fixed := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
+	srv := &Server{
+		Registry: gatewayRegistry(),
+		Limiter:  NewLimiter(map[string]Limits{"release-reviewer": {MaxRequests: 1, Window: time.Minute}}),
+		Now:      func() time.Time { return fixed },
+	}
+
+	// A request denied by the registry (undeclared tool) must not draw down the
+	// budget.
+	rec := httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/decide",
+		strings.NewReader(`{"id":"x","agent":"release-reviewer","prompt":"change-control-review","tools":["shell-exec"]}`)))
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("undeclared-tool request status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+
+	// The agent's single budgeted request is still available.
+	rec = httptest.NewRecorder()
+	srv.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/decide",
+		strings.NewReader(`{"id":"ok","agent":"release-reviewer","prompt":"change-control-review","tools":["gh-pr-read"]}`)))
+	if rec.Code != http.StatusOK {
+		t.Errorf("valid request status = %d, want %d (blocked request wrongly consumed budget)", rec.Code, http.StatusOK)
+	}
+}
+
 func TestServerRejectsBadInput(t *testing.T) {
 	srv := &Server{Registry: gatewayRegistry()}
 

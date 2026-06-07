@@ -49,7 +49,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric sbom <sbom-json-file> <policy-file> <control-id> [--ledger <path>]\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>\n" +
 	"       fabric registry validate <registry-dir>\n" +
-	"       fabric gateway <registry-dir> [--addr <addr>] [--log <path>] [--guardrail <policy-file>]\n" +
+	"       fabric gateway <registry-dir> [--addr <addr>] [--log <path>] [--guardrail <policy-file>] [--limits <limits-file>]\n" +
 	"       fabric collect <config-file> --ledger <path> [--once]\n" +
 	"       fabric release-gate <manifest-file> [--ledger <path>]\n" +
 	"       fabric crosswalk <crosswalk-file> <source-ledger> [--ledger <path>]\n" +
@@ -74,6 +74,7 @@ func run(args []string, out io.Writer) int {
 	addr := ""
 	logPath := ""
 	guardrailPath := ""
+	limitsPath := ""
 	var positional []string
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -111,6 +112,13 @@ func run(args []string, out io.Writer) int {
 			}
 			i++
 			guardrailPath = rest[i]
+		case cmd == "gateway" && a == "--limits":
+			if i+1 >= len(rest) {
+				fmt.Fprintln(out, usage)
+				return 2
+			}
+			i++
+			limitsPath = rest[i]
 		default:
 			positional = append(positional, a)
 		}
@@ -199,7 +207,7 @@ func run(args []string, out io.Writer) int {
 		if addr == "" {
 			addr = ":8080"
 		}
-		return runGateway(positional[0], addr, logPath, guardrailPath, out)
+		return runGateway(positional[0], addr, logPath, guardrailPath, limitsPath, out)
 	}
 
 	// collect runs the continuous collector: it polls every configured source,
@@ -583,7 +591,7 @@ func runTrace(tracesFile, registryDir, controlID, ledgerPath string, out io.Writ
 // the irreducible network shell over the TDD-covered gateway.Server: the
 // admission decision and the log shape it writes are exercised by unit tests, so
 // this function only wires inputs to ListenAndServe.
-func runGateway(registryDir, addr, logPath, guardrailPath string, out io.Writer) int {
+func runGateway(registryDir, addr, logPath, guardrailPath, limitsPath string, out io.Writer) int {
 	reg, err := registry.Load(registryDir)
 	if err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
@@ -611,6 +619,18 @@ func runGateway(registryDir, addr, logPath, guardrailPath string, out io.Writer)
 		}
 	}
 
+	// A bad limits file is caught here too, before the listener binds, so the
+	// gateway never starts serving with budgets it could not fully parse.
+	var limiter *gateway.Limiter
+	if limitsPath != "" {
+		limits, err := gateway.LoadLimits(limitsPath)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+		limiter = gateway.NewLimiter(limits)
+	}
+
 	var logw io.Writer
 	if logPath != "" {
 		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
@@ -622,10 +642,13 @@ func runGateway(registryDir, addr, logPath, guardrailPath string, out io.Writer)
 		logw = f
 	}
 
-	srv := &gateway.Server{Registry: reg, Guardrail: guard, Log: logw}
+	srv := &gateway.Server{Registry: reg, Guardrail: guard, Limiter: limiter, Log: logw}
 	fmt.Fprintf(out, "agent gateway listening on %s (registry %s", addr, registryDir)
 	if guardrailPath != "" {
 		fmt.Fprintf(out, ", guardrail %s", guardrailPath)
+	}
+	if limitsPath != "" {
+		fmt.Fprintf(out, ", limits %s", limitsPath)
 	}
 	if logPath != "" {
 		fmt.Fprintf(out, ", log %s", logPath)

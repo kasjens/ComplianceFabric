@@ -1130,6 +1130,25 @@ func TestGatewayUncompilableGuardrailExitsTwo(t *testing.T) {
 	}
 }
 
+func TestGatewayUnparseableLimitsExitsTwo(t *testing.T) {
+	dir := t.TempDir()
+	// A clean registry so loading succeeds and the failure is unambiguously the
+	// limits file, not the registry.
+	writeFixture(t, filepath.Join(dir, "agents", "a.json"),
+		`{"id":"a","version":"1.0.0","owner":"o","prompts":["p"],"tools":["t"]}`)
+	writeFixture(t, filepath.Join(dir, "prompts", "p.json"), `{"id":"p","version":"1.0.0","text":"hi"}`)
+	writeFixture(t, filepath.Join(dir, "tools", "t.json"), `{"id":"t","version":"1.0.0","description":"a tool"}`)
+	limits := filepath.Join(dir, "limits.json")
+	// An unparseable window duration is rejected before the listener binds, so a
+	// budget the gateway could not fully apply never silently goes unenforced.
+	writeFixture(t, limits, `{"a":{"max-requests":1,"window":"1 fortnight"}}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"gateway", dir, "--limits", limits, "--addr", ":0"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for an unparseable limits file, got %d:\n%s", code, out.String())
+	}
+}
+
 func TestEvalGatePromotedVersionExitsZeroAndAppendsToLedger(t *testing.T) {
 	dir := t.TempDir()
 	runFile := filepath.Join(dir, "run.json")

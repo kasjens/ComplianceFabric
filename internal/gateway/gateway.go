@@ -22,6 +22,11 @@ type Request struct {
 	Prompt string   `json:"prompt"`
 	Tools  []string `json:"tools"`
 	Input  string   `json:"input"`
+	// Cost is the caller-asserted cost of this interaction, charged against the
+	// agent's per-window cost budget by the limiter. Zero when the caller asserts
+	// no cost; a request that declares no cost still counts toward a request-rate
+	// budget.
+	Cost float64 `json:"cost,omitempty"`
 }
 
 // Decision is the gateway's verdict on a request. When Allowed is false, Reason

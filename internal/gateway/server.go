@@ -21,6 +21,9 @@ type Server struct {
 	// value screens nothing, so a server with no guardrail enforces registration
 	// only.
 	Guardrail Guardrail
+	// Limiter enforces per-agent rate and cost budgets, the third gate after the
+	// registry and guardrail. A nil limiter enforces no budget.
+	Limiter *Limiter
 	// Log receives one JSON object per handled interaction, newline-terminated
 	// (JSON Lines). May be nil to disable logging.
 	Log io.Writer
@@ -86,10 +89,16 @@ func (s *Server) serveDecide(w http.ResponseWriter, r *http.Request) {
 
 	// The registry check decides whether the agent may act at all (including the
 	// model allow-list); if it passes, the content guardrail decides whether this
-	// request's input may pass. The first denial wins.
+	// request's input may pass; if that passes too, the limiter decides whether the
+	// agent still has budget for it. The first denial wins, and only a request that
+	// clears the first two gates is charged against the budget — a blocked request
+	// consumes nothing.
 	decision := Decide(s.Registry, req)
 	if decision.Allowed {
 		decision = s.Guardrail.Screen(req.Input)
+	}
+	if decision.Allowed {
+		decision = s.Limiter.Charge(req.Agent, req.Cost, s.now())
 	}
 	s.writeLog(logEntry{
 		ID:      req.ID,
@@ -128,6 +137,16 @@ func (s *Server) serveOutput(w http.ResponseWriter, r *http.Request) {
 	respond(w, decision)
 }
 
+// now returns the server's clock, defaulting to time.Now when Now is nil. It is
+// the single time source for both the limiter charge and the log timestamp of an
+// interaction, so a request's budget window and its logged time agree.
+func (s *Server) now() time.Time {
+	if s.Now != nil {
+		return s.Now()
+	}
+	return time.Now()
+}
+
 // respond writes a Decision as the HTTP reply: 200 when allowed, 403 when not.
 func respond(w http.ResponseWriter, decision Decision) {
 	status := http.StatusOK
@@ -147,11 +166,7 @@ func (s *Server) writeLog(entry logEntry) {
 	if s.Log == nil {
 		return
 	}
-	now := time.Now
-	if s.Now != nil {
-		now = s.Now
-	}
-	entry.Timestamp = now().UTC()
+	entry.Timestamp = s.now().UTC()
 	line, err := json.Marshal(entry)
 	if err != nil {
 		return
