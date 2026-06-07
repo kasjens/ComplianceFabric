@@ -1,0 +1,35 @@
+{
+  "metadata": {
+    "title": "DORA crosswalk - GxP controls answering Regulation (EU) 2022/2554",
+    "version": "0.1.0"
+  },
+  "mappings": [
+    {
+      "control": "dora-9-4-c-access-management",
+      "satisfied-by": [
+        "cfr-part-11-10d-access-control",
+        "annex11-12-1-access-control"
+      ]
+    },
+    {
+      "control": "dora-9-4-d-audit-trail",
+      "satisfied-by": [
+        "cfr-part-11-10e-audit-trail",
+        "annex11-9-audit-trail"
+      ]
+    },
+    {
+      "control": "dora-5-2-risk-management-framework",
+      "satisfied-by": [
+        "annex11-10-change-control",
+        "annex11-11-periodic-evaluation"
+      ]
+    },
+    {
+      "control": "dora-28-3-ict-supply-chain",
+      "satisfied-by": [
+        "cfr-part-11-10a-system-validation"
+      ]
+    }
+  ]
+}

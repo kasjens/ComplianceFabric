@@ -1,0 +1,29 @@
+{
+  "id": "dora",
+  "metadata": {
+    "title": "DORA - Regulation (EU) 2022/2554 on digital operational resilience",
+    "version": "2022-12-14"
+  },
+  "controls": [
+    {
+      "id": "dora-9-4-c-access-management",
+      "title": "Access management and least privilege",
+      "statement": "Implement policies that limit physical and logical access to ICT systems to what is required for legitimate and approved functions and activities."
+    },
+    {
+      "id": "dora-9-4-d-audit-trail",
+      "title": "Logging and traceability of activity",
+      "statement": "Implement mechanisms to promptly detect anomalous activities and to log events, providing a reliable, time-stamped record of access to and actions on ICT systems."
+    },
+    {
+      "id": "dora-5-2-risk-management-framework",
+      "title": "ICT risk management framework and change control",
+      "statement": "Maintain a sound, documented ICT risk management framework with controlled, reviewed changes to ICT systems and periodic evaluation of their effectiveness."
+    },
+    {
+      "id": "dora-28-3-ict-supply-chain",
+      "title": "ICT third-party and supply-chain risk",
+      "statement": "Assess and assure the integrity of ICT services and components obtained from third parties supporting critical or important functions."
+    }
+  ]
+}

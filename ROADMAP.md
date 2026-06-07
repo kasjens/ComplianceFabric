@@ -63,9 +63,11 @@ The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architec
 
 **Update (2026-06-07): OpenTelemetry OTLP/JSON trace ingestion now ships.** `fabric trace` (`evidence.FromAgentTraces`) now also consumes the OTLP/JSON trace export (`{"resourceSpans":[…]}`) directly, alongside the `{"traces":[...]}` envelope and the gateway's JSON-lines log. Each span is flattened into one interaction — its attributes (`id`, `agent`, `prompt`, `tools`, and the gateway's recorded `allowed` verdict) mirror the JSON-lines field names, the span id is the interaction id when no `id` attribute is set, and `startTimeUnixNano` is the observed time — so a standard OpenTelemetry trace pipeline feeds the evidence ledger with no reshaping step. Implemented test-first in `internal/evidence`. This closes the docs/05 claim that every agent action is traced with OpenTelemetry; what is still genuinely open for Phase 4 is only the live-traffic proxy (today the gateway screens what each request declares) and rate/cost limits.
 
-## Phase 5: Cross-sector profiles
+## Phase 5: Cross-sector profiles (in progress)
 
-- DORA and NIS2 profiles that reuse the same engine and evidence base.
+**Update (2026-06-07): the crosswalk engine and a worked DORA crosswalk are in.** `internal/crosswalk` and `fabric crosswalk <crosswalk-file> <source-ledger>` reuse the existing engine and evidence base: a crosswalk maps a target-sector citation onto the controls the Fabric already enforces, and `crosswalk.Apply` rolls a source ledger's evidence up under those citations — a citation is satisfied only when every anchor control behind it is currently satisfied (posture's latest-observation rule, reused so the crosswalk cannot disagree with posture). A DORA catalog (`controls/catalogs/dora.json`) and crosswalk (`controls/crosswalks/dora.json`) answer four DORA citations from the existing Part 11, Annex 11, and supply-chain controls, proven end to end against a real ledger. Still to come: a NIS2 crosswalk, ISO 42001 and EU AI Act crosswalks for the agent layer, and loading crosswalks from the controls tree (today the CLI reads a crosswalk file by path).
+
+- DORA and NIS2 profiles that reuse the same engine and evidence base. **DORA done; NIS2 to come.**
 - ISO 42001 and EU AI Act mappings for the agent layer.
 
 ## Outside the open core

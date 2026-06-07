@@ -15,6 +15,7 @@ import (
 
 	"github.com/kasjens/ComplianceFabric/internal/assess"
 	"github.com/kasjens/ComplianceFabric/internal/collect"
+	"github.com/kasjens/ComplianceFabric/internal/crosswalk"
 	"github.com/kasjens/ComplianceFabric/internal/dashboard"
 	"github.com/kasjens/ComplianceFabric/internal/eval"
 	"github.com/kasjens/ComplianceFabric/internal/evidence"
@@ -51,6 +52,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric gateway <registry-dir> [--addr <addr>] [--log <path>] [--guardrail <policy-file>]\n" +
 	"       fabric collect <config-file> --ledger <path> [--once]\n" +
 	"       fabric release-gate <manifest-file> [--ledger <path>]\n" +
+	"       fabric crosswalk <crosswalk-file> <source-ledger> [--ledger <path>]\n" +
 	"       fabric serve <ledger-path> [--addr <addr>]"
 
 // run executes the CLI and returns the process exit code:
@@ -59,7 +61,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "collect": true, "release-gate": true, "serve": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "collect": true, "release-gate": true, "crosswalk": true, "serve": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -81,7 +83,7 @@ func run(args []string, out io.Writer) int {
 			strict = true
 		case cmd == "collect" && a == "--once":
 			once = true
-		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance" || cmd == "sbom" || cmd == "collect" || cmd == "release-gate") && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance" || cmd == "sbom" || cmd == "collect" || cmd == "release-gate" || cmd == "crosswalk") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -223,6 +225,19 @@ func run(args []string, out io.Writer) int {
 			return 2
 		}
 		return runReleaseGate(positional[0], ledgerPath, out)
+	}
+
+	// crosswalk reuses one framework's enforced controls to answer another's: it
+	// reads a source ledger of existing evidence, applies a crosswalk that maps
+	// target-sector citations onto the controls that already answer them, and
+	// emits one derived record per mapping. This is Phase 5 cross-sector reuse —
+	// the same enforced control answers DORA or NIS2 with no new enforcement.
+	if cmd == "crosswalk" {
+		if len(positional) != 2 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runCrosswalk(positional[0], positional[1], ledgerPath, out)
 	}
 
 	// serve runs the live posture dashboard: a read-only HTTP surface over the
@@ -718,6 +733,31 @@ func runReleaseGate(manifestPath, ledgerPath string, out io.Writer) int {
 	}
 	fmt.Fprintf(out, "release cleared: %d evidence record(s), all satisfied\n", len(records))
 	return 0
+}
+
+// runCrosswalk reads a source ledger of existing evidence and a crosswalk that
+// maps target-sector citations onto the controls that already answer them, then
+// emits one derived record per mapping. With --ledger the derived records are
+// appended to a ledger so the cross-sector rollup becomes durable evidence. The
+// exit code follows emitRecords: non-zero when any target citation is not
+// satisfied, so a gap in the second framework surfaces in the pipeline.
+func runCrosswalk(crosswalkPath, sourceLedger, ledgerPath string, out io.Writer) int {
+	data, err := os.ReadFile(crosswalkPath)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	var cw crosswalk.Crosswalk
+	if err := json.Unmarshal(data, &cw); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := ledgerRecords(sourceLedger)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return emitRecords(crosswalk.Apply(records, cw), ledgerPath, out)
 }
 
 // execFetch obtains a source's raw input by running its fetch command and

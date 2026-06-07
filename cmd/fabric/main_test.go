@@ -744,6 +744,90 @@ func TestReleaseGateRequiresManifestArg(t *testing.T) {
 	}
 }
 
+// cleanSBOMLedger builds a source ledger holding one satisfied SBOM record keyed
+// to the given control, by running the sbom producer against a clean SBOM. It is
+// the anchor evidence a crosswalk rolls up to a second-framework citation.
+func cleanSBOMLedger(t *testing.T, dir, control string) string {
+	t.Helper()
+	sbom := filepath.Join(dir, "anchor-sbom.json")
+	writeFixture(t, sbom, `{
+	  "metadata": { "timestamp": "2026-06-07T10:00:00Z",
+	    "component": { "name": "registry.example/mes", "version": "1.4.2" } },
+	  "components": [ { "name": "openssl", "version": "3.0.8" } ]
+	}`)
+	policy := filepath.Join(dir, "anchor-policy.json")
+	writeFixture(t, policy, `{"banned":[{"name":"log4j","version":"2.14.1"}]}`)
+	led := filepath.Join(dir, "source.ledger")
+	if code := run([]string{"sbom", sbom, policy, control, "--ledger", led}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("failed to build the anchor ledger, sbom producer exit %d", code)
+	}
+	return led
+}
+
+// A satisfied anchor control rolls up under the target-sector citation: the same
+// enforced control answers a second framework with no new enforcement.
+func TestCrosswalkRollsAnchorEvidenceToTargetCitation(t *testing.T) {
+	dir := t.TempDir()
+	src := cleanSBOMLedger(t, dir, "cfr-part-11-10a-system-validation")
+	cw := filepath.Join(dir, "crosswalk.json")
+	writeFixture(t, cw, `{"mappings":[
+	  {"control":"dora-9-2-ict-supply-chain","satisfied-by":["cfr-part-11-10a-system-validation"]}
+	]}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"crosswalk", cw, src}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for a satisfied crosswalk, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "dora-9-2-ict-supply-chain") {
+		t.Errorf("expected a derived DORA record, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "satisfied") {
+		t.Errorf("expected the derived record to be satisfied, got:\n%s", out.String())
+	}
+}
+
+// A crosswalk to a control with no anchor evidence is not satisfied, and the
+// command exits 1 so a gap in the second framework surfaces.
+func TestCrosswalkUnmappedAnchorIsNotSatisfied(t *testing.T) {
+	dir := t.TempDir()
+	src := cleanSBOMLedger(t, dir, "cfr-part-11-10a-system-validation")
+	cw := filepath.Join(dir, "crosswalk.json")
+	writeFixture(t, cw, `{"mappings":[
+	  {"control":"nis2-21-2-d-supply-chain","satisfied-by":["control-with-no-evidence"]}
+	]}`)
+
+	var out bytes.Buffer
+	if code := run([]string{"crosswalk", cw, src}, &out); code != 1 {
+		t.Fatalf("expected exit 1 for an unsatisfied crosswalk, got %d:\n%s", code, out.String())
+	}
+}
+
+// The derived records can be appended to a ledger that then verifies, so the
+// second-framework rollup becomes durable evidence like any other.
+func TestCrosswalkAppendsDerivedRecordsToLedger(t *testing.T) {
+	dir := t.TempDir()
+	src := cleanSBOMLedger(t, dir, "cfr-part-11-10a-system-validation")
+	cw := filepath.Join(dir, "crosswalk.json")
+	writeFixture(t, cw, `{"mappings":[
+	  {"control":"dora-9-2-ict-supply-chain","satisfied-by":["cfr-part-11-10a-system-validation"]}
+	]}`)
+	out := filepath.Join(dir, "crosswalk.ledger")
+
+	if code := run([]string{"crosswalk", cw, src, "--ledger", out}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("expected exit 0, got %d", code)
+	}
+	if vcode := run([]string{"ledger", "verify", out}, &bytes.Buffer{}); vcode != 0 {
+		t.Errorf("expected the crosswalk ledger to verify, got exit %d", vcode)
+	}
+}
+
+func TestCrosswalkRequiresTwoArgs(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"crosswalk", "only-one"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for a missing argument, got %d", code)
+	}
+}
+
 // driftAppsFixture writes an Argo applications JSON file with the given sync
 // status and returns its path, for use as a collect source's fetch input.
 func driftAppsFixture(t *testing.T, dir, status string) string {
