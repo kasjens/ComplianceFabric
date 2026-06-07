@@ -1,0 +1,6 @@
+{
+  "banned": [
+    { "name": "log4j-core", "version": "" },
+    { "name": "commons-collections", "version": "3.2.1" }
+  ]
+}

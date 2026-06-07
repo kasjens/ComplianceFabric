@@ -679,6 +679,71 @@ func TestSBOMRequiresThreePositionals(t *testing.T) {
 	}
 }
 
+// A release manifest whose generated SBOM is clean clears the gate: the release
+// evidence is appended to a fresh ledger that verifies, posture is clean, and the
+// command exits 0 so the release pipeline proceeds.
+func TestReleaseGateClearsCleanRelease(t *testing.T) {
+	dir := t.TempDir()
+	sbom := filepath.Join(dir, "sbom.json")
+	writeFixture(t, sbom, `{
+	  "metadata": { "timestamp": "2026-06-07T10:00:00Z",
+	    "component": { "name": "registry.example/mes", "version": "1.4.2" } },
+	  "components": [ { "name": "openssl", "version": "3.0.8" } ]
+	}`)
+	policy := filepath.Join(dir, "policy.json")
+	writeFixture(t, policy, `{"banned":[{"name":"log4j","version":"2.14.1"}]}`)
+	manifest := filepath.Join(dir, "release.json")
+	writeFixture(t, manifest, `{"release":"mes-1.4.2","sources":[
+	  {"type":"sbom","file":"`+sbom+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+policy+`"}
+	]}`)
+	led := filepath.Join(dir, "release.ledger")
+
+	var out bytes.Buffer
+	if code := run([]string{"release-gate", manifest, "--ledger", led}, &out); code != 0 {
+		t.Fatalf("expected exit 0 for a clean release, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "cleared") {
+		t.Errorf("expected a cleared message, got:\n%s", out.String())
+	}
+	if vcode := run([]string{"ledger", "verify", led}, &bytes.Buffer{}); vcode != 0 {
+		t.Errorf("expected the release ledger to verify, got exit %d", vcode)
+	}
+}
+
+// A banned component present in the release blocks the gate: the command exits 1
+// so the release pipeline stops.
+func TestReleaseGateBlocksOnBannedComponent(t *testing.T) {
+	dir := t.TempDir()
+	sbom := filepath.Join(dir, "sbom.json")
+	writeFixture(t, sbom, `{
+	  "metadata": { "timestamp": "2026-06-07T10:00:00Z",
+	    "component": { "name": "registry.example/mes", "version": "1.4.2" } },
+	  "components": [ { "name": "openssl", "version": "3.0.8" } ]
+	}`)
+	policy := filepath.Join(dir, "policy.json")
+	writeFixture(t, policy, `{"banned":[{"name":"openssl","version":"3.0.8"}]}`)
+	manifest := filepath.Join(dir, "release.json")
+	writeFixture(t, manifest, `{"sources":[
+	  {"type":"sbom","file":"`+sbom+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+policy+`"}
+	]}`)
+	led := filepath.Join(dir, "release.ledger")
+
+	var out bytes.Buffer
+	if code := run([]string{"release-gate", manifest, "--ledger", led}, &out); code != 1 {
+		t.Fatalf("expected exit 1 for a banned component, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "blocked") {
+		t.Errorf("expected a blocked message, got:\n%s", out.String())
+	}
+}
+
+func TestReleaseGateRequiresManifestArg(t *testing.T) {
+	var out bytes.Buffer
+	if code := run([]string{"release-gate"}, &out); code != 2 {
+		t.Fatalf("expected exit 2 for a missing manifest arg, got %d", code)
+	}
+}
+
 // driftAppsFixture writes an Argo applications JSON file with the given sync
 // status and returns its path, for use as a collect source's fetch input.
 func driftAppsFixture(t *testing.T, dir, status string) string {

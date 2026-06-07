@@ -26,6 +26,7 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/policies"
 	"github.com/kasjens/ComplianceFabric/internal/posture"
 	"github.com/kasjens/ComplianceFabric/internal/registry"
+	"github.com/kasjens/ComplianceFabric/internal/release"
 	"github.com/kasjens/ComplianceFabric/internal/report"
 	"github.com/kasjens/ComplianceFabric/internal/validate"
 )
@@ -49,6 +50,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric registry validate <registry-dir>\n" +
 	"       fabric gateway <registry-dir> [--addr <addr>] [--log <path>] [--guardrail <policy-file>]\n" +
 	"       fabric collect <config-file> --ledger <path> [--once]\n" +
+	"       fabric release-gate <manifest-file> [--ledger <path>]\n" +
 	"       fabric serve <ledger-path> [--addr <addr>]"
 
 // run executes the CLI and returns the process exit code:
@@ -57,7 +59,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "collect": true, "serve": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "collect": true, "release-gate": true, "serve": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -79,7 +81,7 @@ func run(args []string, out io.Writer) int {
 			strict = true
 		case cmd == "collect" && a == "--once":
 			once = true
-		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance" || cmd == "sbom" || cmd == "collect") && a == "--ledger":
+		case (cmd == "evidence" || cmd == "policy-report" || cmd == "drift" || cmd == "trace" || cmd == "eval-gate" || cmd == "provenance" || cmd == "sbom" || cmd == "collect" || cmd == "release-gate") && a == "--ledger":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
@@ -208,6 +210,19 @@ func run(args []string, out io.Writer) int {
 			return 2
 		}
 		return runCollect(positional[0], ledgerPath, once, out)
+	}
+
+	// release-gate runs the release evidence gate: it reads a release manifest of
+	// generated supply-chain artifacts, turns each into control evidence, appends it
+	// to a fresh per-release ledger, and clears the release (exit 0) only when the
+	// chain verifies and every record is satisfied. This binds the generation
+	// harness into the release pipeline rather than leaving it as an e2e proof.
+	if cmd == "release-gate" {
+		if len(positional) != 1 {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		return runReleaseGate(positional[0], ledgerPath, out)
 	}
 
 	// serve runs the live posture dashboard: a read-only HTTP surface over the
@@ -658,6 +673,50 @@ func reportTick(changed []evidence.Record, err error, out io.Writer) int {
 		fmt.Fprintf(out, "tick warnings: %v\n", err)
 		return 1
 	}
+	return 0
+}
+
+// runReleaseGate gates a release on its generated evidence. It loads the release
+// manifest, runs every producer over the named artifacts, optionally appends the
+// resulting records to a fresh per-release ledger and verifies the chain, prints
+// the posture rollup, and exits non-zero when the chain fails to verify or any
+// control is not satisfied - so a release with a banned component, an untrusted
+// builder, or a failed evaluation gate is stopped. The manifest loading and the
+// gate decision are TDD-covered in internal/release; this shell only wires file
+// and ledger I/O.
+func runReleaseGate(manifestPath, ledgerPath string, out io.Writer) int {
+	m, err := release.LoadManifest(manifestPath)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	records, err := m.Evidence()
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+
+	if ledgerPath != "" {
+		l := ledger.Open(ledgerPath)
+		for _, rec := range records {
+			if _, err := l.Append(rec); err != nil {
+				fmt.Fprintf(out, "error: %v\n", err)
+				return 2
+			}
+		}
+		if err := l.Verify(); err != nil {
+			fmt.Fprintf(out, "release blocked: ledger verification failed: %v\n", err)
+			return 1
+		}
+	}
+
+	fmt.Fprint(out, posture.Summarize(records).Render())
+
+	if blocking := release.Blocking(records); len(blocking) > 0 {
+		fmt.Fprintf(out, "release blocked: %d control(s) not satisfied\n", len(blocking))
+		return 1
+	}
+	fmt.Fprintf(out, "release cleared: %d evidence record(s), all satisfied\n", len(records))
 	return 0
 }
 

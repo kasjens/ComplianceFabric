@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"testing"
+	"time"
 
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 	"github.com/kasjens/ComplianceFabric/internal/registry"
@@ -145,6 +146,127 @@ func TestFromAgentTracesWithoutVerdictIsJudgedByRegistry(t *testing.T) {
 	}
 	if len(records) != 1 || records[0].Result != oscal.StatusSatisfied {
 		t.Fatalf("expected one satisfied record, got %v", records)
+	}
+}
+
+// docs/05 says every agent action is traced with OpenTelemetry. FromAgentTraces
+// must therefore consume the OTLP/JSON export shape (resourceSpans → scopeSpans →
+// spans) directly, mapping each span's attributes to an interaction and its
+// startTimeUnixNano to the observed time, so an OTel trace pipeline can feed the
+// evidence ledger with no reshaping step. A conforming interaction is satisfied.
+func TestFromAgentTracesAcceptsOTLPJSON(t *testing.T) {
+	otlp := `{
+		"resourceSpans": [{
+			"scopeSpans": [{
+				"spans": [{
+					"spanId": "abc123",
+					"name": "agent.interaction",
+					"startTimeUnixNano": "1700000000000000000",
+					"attributes": [
+						{"key":"id","value":{"stringValue":"t1"}},
+						{"key":"agent","value":{"stringValue":"release-reviewer"}},
+						{"key":"prompt","value":{"stringValue":"change-control-review"}},
+						{"key":"tools","value":{"arrayValue":{"values":[{"stringValue":"gh-pr-read"}]}}}
+					]
+				}]
+			}]
+		}]
+	}`
+	records, err := FromAgentTraces([]byte(otlp), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	r := records[0]
+	if r.Result != oscal.StatusSatisfied {
+		t.Errorf("expected satisfied, got %q", r.Result)
+	}
+	if r.Subject != "agent/release-reviewer/trace/t1" {
+		t.Errorf("unexpected subject %q", r.Subject)
+	}
+	if want := time.Unix(0, 1700000000000000000).UTC(); !r.ObservedAt.Equal(want) {
+		t.Errorf("observed-at = %v, want %v (span startTimeUnixNano)", r.ObservedAt, want)
+	}
+}
+
+// An OTLP span whose agent is unregistered (or that used an undeclared prompt or
+// tool) is off-policy, judged by the registry surface exactly like the other
+// shapes.
+func TestFromAgentTracesOTLPUnregisteredAgentIsNotSatisfied(t *testing.T) {
+	otlp := `{"resourceSpans":[{"scopeSpans":[{"spans":[{
+		"spanId":"s1","startTimeUnixNano":"1700000000000000000",
+		"attributes":[
+			{"key":"agent","value":{"stringValue":"rogue-agent"}},
+			{"key":"prompt","value":{"stringValue":"x"}}
+		]
+	}]}]}]}`
+	records, err := FromAgentTraces([]byte(otlp), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 1 || records[0].Result != oscal.StatusNotSatisfied {
+		t.Fatalf("expected one not-satisfied record, got %v", records)
+	}
+	// With no "id" attribute the interaction id falls back to the span id.
+	if records[0].Subject != "agent/rogue-agent/trace/s1" {
+		t.Errorf("expected the span id as the interaction id, got subject %q", records[0].Subject)
+	}
+}
+
+// When the gateway emits its inline verdict as an OTLP boolean attribute, evidence
+// must honor it: a span recorded as allowed:false is not-satisfied even when the
+// agent, prompt, and tools are all qualified (a content-guardrail block).
+func TestFromAgentTracesOTLPHonorsRecordedBlock(t *testing.T) {
+	otlp := `{"resourceSpans":[{"scopeSpans":[{"spans":[{
+		"spanId":"s1","startTimeUnixNano":"1700000000000000000",
+		"attributes":[
+			{"key":"id","value":{"stringValue":"t1"}},
+			{"key":"agent","value":{"stringValue":"release-reviewer"}},
+			{"key":"prompt","value":{"stringValue":"change-control-review"}},
+			{"key":"tools","value":{"arrayValue":{"values":[{"stringValue":"gh-pr-read"}]}}},
+			{"key":"allowed","value":{"boolValue":false}}
+		]
+	}]}]}]}`
+	records, err := FromAgentTraces([]byte(otlp), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 1 || records[0].Result != oscal.StatusNotSatisfied {
+		t.Fatalf("a gateway-blocked span must be not-satisfied, got %v", records)
+	}
+}
+
+// OTLP nests spans under resourceSpans → scopeSpans → spans; every span across all
+// of those nestings must be flattened into one record each.
+func TestFromAgentTracesOTLPFlattensAllSpans(t *testing.T) {
+	otlp := `{"resourceSpans":[
+		{"scopeSpans":[{"spans":[
+			{"spanId":"s1","startTimeUnixNano":"1700000000000000000","attributes":[
+				{"key":"id","value":{"stringValue":"t1"}},
+				{"key":"agent","value":{"stringValue":"release-reviewer"}},
+				{"key":"prompt","value":{"stringValue":"change-control-review"}},
+				{"key":"tools","value":{"arrayValue":{"values":[{"stringValue":"gh-pr-read"}]}}}
+			]}
+		]}]},
+		{"scopeSpans":[{"spans":[
+			{"spanId":"s2","startTimeUnixNano":"1700000001000000000","attributes":[
+				{"key":"id","value":{"stringValue":"t2"}},
+				{"key":"agent","value":{"stringValue":"rogue-agent"}},
+				{"key":"prompt","value":{"stringValue":"x"}}
+			]}
+		]}]}
+	]}`
+	records, err := FromAgentTraces([]byte(otlp), traceRegistry(), "eu-ai-act-12-record-keeping")
+	if err != nil {
+		t.Fatalf("FromAgentTraces: %v", err)
+	}
+	if len(records) != 2 {
+		t.Fatalf("expected 2 records (one per span), got %d", len(records))
+	}
+	if records[0].Result != oscal.StatusSatisfied || records[1].Result != oscal.StatusNotSatisfied {
+		t.Errorf("unexpected results: %q, %q", records[0].Result, records[1].Result)
 	}
 }
 

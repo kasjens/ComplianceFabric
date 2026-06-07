@@ -1,0 +1,11 @@
+{
+  "release": "compliance-fabric",
+  "sources": [
+    {
+      "type": "sbom",
+      "file": "release/sbom.cyclonedx.json",
+      "control": "cfr-part-11-10a-system-validation",
+      "sbom-policy-file": "release/sbom-policy.json"
+    }
+  ]
+}

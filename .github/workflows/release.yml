@@ -1,0 +1,66 @@
+name: Release
+
+# The release pipeline. On a tagged release it regenerates the supply-chain
+# evidence and gates the release on it: syft produces a real SBOM of the released
+# tree, `fabric release-gate` turns it into control evidence keyed to
+# cfr-part-11-10a-system-validation, appends it to a fresh per-release ledger, and
+# clears the release only when the chain verifies and every control is satisfied.
+# The verified ledger and the SBOM are uploaded as release evidence artifacts.
+#
+# This binds the generation harness into the release pipeline itself, rather than
+# leaving it as the test/e2e/release.sh proof.
+
+on:
+  release:
+    types: [published]
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build fabric (stdlib-only)
+        run: go build -o fabric ./cmd/fabric
+
+      - name: Install syft
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
+            | sh -s -- -b "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Generate the release SBOM
+        run: syft dir:. -o cyclonedx-json > release/sbom.cyclonedx.json
+
+      - name: Gate the release on its evidence
+        run: ./fabric release-gate release/manifest.json --ledger release/release.ledger
+
+      - name: Verify the release evidence ledger
+        run: ./fabric ledger verify release/release.ledger
+
+      - name: Upload release evidence artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-evidence
+          path: |
+            release/sbom.cyclonedx.json
+            release/release.ledger
+
+      - name: Attach release evidence to the GitHub release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.event.release.tag_name }}" \
+            release/sbom.cyclonedx.json release/release.ledger --clobber

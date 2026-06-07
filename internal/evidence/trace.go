@@ -3,6 +3,7 @@ package evidence
 import (
 	"bytes"
 	"encoding/json"
+	"strconv"
 	"time"
 
 	"github.com/kasjens/ComplianceFabric/internal/gateway"
@@ -76,17 +77,19 @@ func FromAgentTraces(tracesJSON []byte, reg registry.Registry, controlID string)
 	return records, nil
 }
 
-// parseTraces accepts either interaction-log shape: the batch envelope
-// {"traces":[...]} or the inline gateway's JSON-lines log (one interaction
-// object per line). Detecting the shape rather than demanding one lets the same
-// evidence producer consume a gateway log directly, so what the gateway enforced
-// inline rolls up as evidence with no reshaping step.
+// parseTraces accepts any of three interaction-log shapes: the batch envelope
+// {"traces":[...]}, the OTLP/JSON trace export ({"resourceSpans":[...]}) an
+// OpenTelemetry pipeline produces, or the inline gateway's JSON-lines log (one
+// interaction object per line). Detecting the shape rather than demanding one lets
+// the same evidence producer consume a gateway log or an OTel export directly, so
+// what the gateway enforced inline rolls up as evidence with no reshaping step.
 func parseTraces(data []byte) ([]traceRec, error) {
 	trimmed := bytes.TrimSpace(data)
 
-	// A single, valid JSON object is either the envelope (has a "traces" array)
-	// or one JSON-lines record. A multi-line JSON-lines log is not valid as one
-	// JSON value, so it falls through to line-by-line parsing below.
+	// A single, valid JSON object is the envelope (has a "traces" array), an
+	// OTLP/JSON export (has "resourceSpans"), or one JSON-lines record. A
+	// multi-line JSON-lines log is not valid as one JSON value, so it falls
+	// through to line-by-line parsing below.
 	var probe map[string]json.RawMessage
 	if json.Unmarshal(trimmed, &probe) == nil {
 		if raw, ok := probe["traces"]; ok {
@@ -95,6 +98,9 @@ func parseTraces(data []byte) ([]traceRec, error) {
 				return nil, err
 			}
 			return recs, nil
+		}
+		if _, ok := probe["resourceSpans"]; ok {
+			return parseOTLPTraces(trimmed)
 		}
 		var tr traceRec
 		if err := json.Unmarshal(trimmed, &tr); err != nil {
@@ -116,4 +122,95 @@ func parseTraces(data []byte) ([]traceRec, error) {
 		recs = append(recs, tr)
 	}
 	return recs, nil
+}
+
+// OTLP/JSON trace export shapes (a subset of OpenTelemetry's
+// ExportTraceServiceRequest), enough to read one agent interaction per span.
+// Per the OTLP/JSON encoding, 64-bit fields such as the unix-nano timestamps are
+// strings, so StartTimeUnixNano is a string parsed below.
+type otlpExport struct {
+	ResourceSpans []struct {
+		ScopeSpans []struct {
+			Spans []otlpSpan `json:"spans"`
+		} `json:"scopeSpans"`
+	} `json:"resourceSpans"`
+}
+
+type otlpSpan struct {
+	SpanID            string         `json:"spanId"`
+	Name              string         `json:"name"`
+	StartTimeUnixNano string         `json:"startTimeUnixNano"`
+	Attributes        []otlpKeyValue `json:"attributes"`
+}
+
+type otlpKeyValue struct {
+	Key   string `json:"key"`
+	Value struct {
+		StringValue *string `json:"stringValue"`
+		BoolValue   *bool   `json:"boolValue"`
+		ArrayValue  *struct {
+			Values []struct {
+				StringValue *string `json:"stringValue"`
+			} `json:"values"`
+		} `json:"arrayValue"`
+	} `json:"value"`
+}
+
+// parseOTLPTraces flattens an OTLP/JSON trace export into interaction records.
+// Each span is one interaction: its attributes carry the agent, prompt, tools, an
+// optional interaction id (falling back to the span id), and an optional recorded
+// verdict (the gateway's allowed bool), and its start time is the observed time.
+// The attribute keys mirror the gateway log's field names, so a span and a
+// JSON-lines record describe the same interaction in two transports.
+func parseOTLPTraces(data []byte) ([]traceRec, error) {
+	var export otlpExport
+	if err := json.Unmarshal(data, &export); err != nil {
+		return nil, err
+	}
+
+	var recs []traceRec
+	for _, rs := range export.ResourceSpans {
+		for _, ss := range rs.ScopeSpans {
+			for _, span := range ss.Spans {
+				recs = append(recs, spanToTrace(span))
+			}
+		}
+	}
+	return recs, nil
+}
+
+// spanToTrace maps one OTLP span to an interaction record, reading the fabric
+// interaction attributes from the span and its start time as the timestamp.
+func spanToTrace(span otlpSpan) traceRec {
+	tr := traceRec{ID: span.SpanID}
+	for _, attr := range span.Attributes {
+		switch attr.Key {
+		case "id":
+			if attr.Value.StringValue != nil {
+				tr.ID = *attr.Value.StringValue
+			}
+		case "agent":
+			if attr.Value.StringValue != nil {
+				tr.Agent = *attr.Value.StringValue
+			}
+		case "prompt":
+			if attr.Value.StringValue != nil {
+				tr.Prompt = *attr.Value.StringValue
+			}
+		case "tools":
+			if attr.Value.ArrayValue != nil {
+				for _, v := range attr.Value.ArrayValue.Values {
+					if v.StringValue != nil {
+						tr.Tools = append(tr.Tools, *v.StringValue)
+					}
+				}
+			}
+		case "allowed":
+			tr.Allowed = attr.Value.BoolValue
+		}
+	}
+	if nanos, err := strconv.ParseInt(span.StartTimeUnixNano, 10, 64); err == nil && nanos > 0 {
+		tr.Timestamp = time.Unix(0, nanos).UTC()
+	}
+	return tr
 }
