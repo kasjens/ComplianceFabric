@@ -1,0 +1,20 @@
+{
+  "metadata": {
+    "title": "ISO/IEC 42001 crosswalk - agent-layer controls answering the AI management system",
+    "version": "0.1.0"
+  },
+  "mappings": [
+    {
+      "control": "iso-42001-a-6-2-4-verification-validation",
+      "satisfied-by": [
+        "eu-ai-act-15-accuracy-robustness"
+      ]
+    },
+    {
+      "control": "iso-42001-a-6-2-8-recording-event-logs",
+      "satisfied-by": [
+        "eu-ai-act-12-record-keeping"
+      ]
+    }
+  ]
+}

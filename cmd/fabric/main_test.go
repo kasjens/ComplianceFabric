@@ -1171,6 +1171,59 @@ func TestEvalGateRequiresThreePositionalArgs(t *testing.T) {
 	}
 }
 
+// evalGateLedger builds a source ledger holding one satisfied eval-gate record
+// keyed to the given control, by promoting an all-passing evaluation run through
+// a gate. It is the agent-layer anchor evidence an ISO 42001 / EU AI Act
+// crosswalk rolls up.
+func evalGateLedger(t *testing.T, dir, control string) string {
+	t.Helper()
+	runFile := filepath.Join(dir, "eval-run.json")
+	writeFixture(t, runFile, `{"agent":"release-reviewer","version":"1.0.0","run-at":"2026-06-07T10:00:00Z",
+		"results":[{"case":"inj-1","suite":"prompt-injection","passed":true}]}`)
+	gateFile := filepath.Join(dir, "eval-gate.json")
+	writeFixture(t, gateFile, `{"required-suites":["prompt-injection"],"max-failures":0}`)
+	led := filepath.Join(dir, "agent.ledger")
+	if code := run([]string{"eval-gate", runFile, gateFile, control, "--ledger", led}, &bytes.Buffer{}); code != 0 {
+		t.Fatalf("failed to build the agent-layer anchor ledger, eval-gate exit %d", code)
+	}
+	return led
+}
+
+// The shipped ISO 42001 crosswalk answers its verification/validation citation
+// from the same EU AI Act eval-gate control the agent layer already evidences:
+// a satisfied pre-promotion eval gate rolls up under ISO 42001 with no new
+// enforcement. Running it against the real artifact proves the committed file is
+// valid and wired to anchors that exist.
+func TestCrosswalkRollsShippedISO42001(t *testing.T) {
+	dir := t.TempDir()
+	src := evalGateLedger(t, dir, "eu-ai-act-15-accuracy-robustness")
+
+	var out bytes.Buffer
+	// The record-keeping citation maps to an anchor not present in this minimal
+	// ledger, so a non-zero exit (open gaps) is expected; the verification one
+	// must be satisfied.
+	code := run([]string{"crosswalk", "../../controls/crosswalks/iso-42001.json", src}, &out)
+	if code != 1 {
+		t.Fatalf("expected exit 1 (some citations unsatisfied) for the shipped ISO 42001 crosswalk, got %d:\n%s", code, out.String())
+	}
+	var recs []evidence.Record
+	if err := json.Unmarshal(out.Bytes(), &recs); err != nil {
+		t.Fatalf("crosswalk output is not record JSON: %v\n%s", err, out.String())
+	}
+	found := false
+	for _, r := range recs {
+		if r.ControlID == "iso-42001-a-6-2-4-verification-validation" {
+			found = true
+			if r.Result != "satisfied" {
+				t.Errorf("ISO 42001 verification/validation citation = %q, want satisfied", r.Result)
+			}
+		}
+	}
+	if !found {
+		t.Error("ISO 42001 verification/validation citation missing from derived records")
+	}
+}
+
 func TestRegistryRequiresSubcommandAndPath(t *testing.T) {
 	var out bytes.Buffer
 	if code := run([]string{"registry", "validate"}, &out); code != 2 {

@@ -1,0 +1,19 @@
+{
+  "id": "iso-42001",
+  "metadata": {
+    "title": "ISO/IEC 42001:2023 - Artificial intelligence management system",
+    "version": "2023-12-01"
+  },
+  "controls": [
+    {
+      "id": "iso-42001-a-6-2-4-verification-validation",
+      "title": "Verification and validation of the AI system",
+      "statement": "Define and document verification and validation measures for the AI system and the criteria for their use before the system is deployed or materially changed."
+    },
+    {
+      "id": "iso-42001-a-6-2-8-recording-event-logs",
+      "title": "Recording of AI system event logs",
+      "statement": "Determine at which phases of the AI system life cycle the recording of event logs is enabled, so that the system's operation can be reconstructed and monitored."
+    }
+  ]
+}

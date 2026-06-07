@@ -38,6 +38,7 @@ controls/
   crosswalks/
     dora.json
     nis2.json
+    iso-42001.json
 ```
 
 A crosswalk maps a target-sector citation (for example a DORA or NIS2 article) onto the controls the Fabric already enforces and evidences, so the same enforced control answers a second framework with no new enforcement. `fabric validate` checks each crosswalk's referential integrity against the catalogs — every anchor and target resolves to a real control, and no citation is mapped twice or to nothing — and `fabric crosswalk <crosswalk-file> <source-ledger>` rolls a ledger's existing evidence up under the mapped citations.
