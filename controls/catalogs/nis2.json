@@ -1,0 +1,29 @@
+{
+  "id": "nis2",
+  "metadata": {
+    "title": "NIS2 - Directive (EU) 2022/2555 on measures for a high common level of cybersecurity",
+    "version": "2022-12-14"
+  },
+  "controls": [
+    {
+      "id": "nis2-21-2-d-supply-chain-security",
+      "title": "Supply chain security",
+      "statement": "Security related to the supply chain, including security-related aspects concerning the relationships between each entity and its direct suppliers or service providers."
+    },
+    {
+      "id": "nis2-21-2-e-secure-development",
+      "title": "Security in network and information systems acquisition, development and maintenance",
+      "statement": "Security in network and information systems acquisition, development and maintenance, including vulnerability handling and disclosure."
+    },
+    {
+      "id": "nis2-21-2-f-effectiveness-assessment",
+      "title": "Policies to assess the effectiveness of risk-management measures",
+      "statement": "Policies and procedures to assess the effectiveness of cybersecurity risk-management measures."
+    },
+    {
+      "id": "nis2-21-2-i-access-control",
+      "title": "Access control policies and asset management",
+      "statement": "Human resources security, access control policies and asset management."
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "metadata": {
+    "title": "NIS2 crosswalk - GxP controls answering Directive (EU) 2022/2555",
+    "version": "0.1.0"
+  },
+  "mappings": [
+    {
+      "control": "nis2-21-2-d-supply-chain-security",
+      "satisfied-by": [
+        "cfr-part-11-10a-system-validation"
+      ]
+    },
+    {
+      "control": "nis2-21-2-e-secure-development",
+      "satisfied-by": [
+        "annex11-10-change-control"
+      ]
+    },
+    {
+      "control": "nis2-21-2-f-effectiveness-assessment",
+      "satisfied-by": [
+        "annex11-11-periodic-evaluation"
+      ]
+    },
+    {
+      "control": "nis2-21-2-i-access-control",
+      "satisfied-by": [
+        "cfr-part-11-10d-access-control",
+        "annex11-12-1-access-control"
+      ]
+    }
+  ]
+}

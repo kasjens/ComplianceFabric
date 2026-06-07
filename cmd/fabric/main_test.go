@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/kasjens/ComplianceFabric/internal/evidence"
 )
 
 func writeFixture(t *testing.T, path, body string) {
@@ -825,6 +827,45 @@ func TestCrosswalkRequiresTwoArgs(t *testing.T) {
 	var out bytes.Buffer
 	if code := run([]string{"crosswalk", "only-one"}, &out); code != 2 {
 		t.Fatalf("expected exit 2 for a missing argument, got %d", code)
+	}
+}
+
+// The shipped NIS2 crosswalk answers its supply-chain citation from the same
+// Part 11 system-validation control the DORA crosswalk uses: a satisfied
+// supply-chain anchor rolls up under NIS2 Article 21(2)(d) with no new
+// enforcement. Running it against the real artifact proves the committed file is
+// valid and wired to anchors that exist.
+func TestCrosswalkRollsShippedNIS2SupplyChain(t *testing.T) {
+	dir := t.TempDir()
+	src := cleanSBOMLedger(t, dir, "cfr-part-11-10a-system-validation")
+
+	var out bytes.Buffer
+	code := run([]string{"crosswalk", "../../controls/crosswalks/nis2.json", src}, &out)
+	// Some NIS2 citations map to anchors not present in this minimal ledger, so a
+	// non-zero exit (open gaps) is expected; the supply-chain citation must be
+	// satisfied and present in the output.
+	if code != 1 {
+		t.Fatalf("expected exit 1 (some citations unsatisfied) for the shipped NIS2 crosswalk, got %d:\n%s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "nis2-21-2-d-supply-chain-security") {
+		t.Fatalf("expected the NIS2 supply-chain citation in the output, got:\n%s", out.String())
+	}
+	// The supply-chain citation, whose anchor is satisfied, must be satisfied.
+	var recs []evidence.Record
+	if err := json.Unmarshal(out.Bytes(), &recs); err != nil {
+		t.Fatalf("crosswalk output is not record JSON: %v\n%s", err, out.String())
+	}
+	found := false
+	for _, r := range recs {
+		if r.ControlID == "nis2-21-2-d-supply-chain-security" {
+			found = true
+			if r.Result != "satisfied" {
+				t.Errorf("NIS2 supply-chain citation = %q, want satisfied", r.Result)
+			}
+		}
+	}
+	if !found {
+		t.Error("NIS2 supply-chain citation missing from derived records")
 	}
 }
 
