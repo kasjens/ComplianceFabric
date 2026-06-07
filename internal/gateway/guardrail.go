@@ -47,6 +47,13 @@ func CompileGuardrail(p GuardrailPolicy) (Guardrail, error) {
 	return Guardrail{rules: rules}, nil
 }
 
+// active reports whether the guardrail has any rules. The proxy uses it to skip
+// buffering and screening an upstream response when no content policy is
+// configured, so an unguarded proxy streams responses through untouched.
+func (g Guardrail) active() bool {
+	return len(g.rules) > 0
+}
+
 // Screen returns a deny Decision naming the first rule the input matches, or an
 // allow Decision when no rule matches. The rules are checked in policy order, so
 // the most specific or highest-priority rule should be listed first.

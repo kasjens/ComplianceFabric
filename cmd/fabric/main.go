@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"time"
@@ -50,6 +51,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 	"       fabric ledger <verify|assess|posture> <ledger-path>\n" +
 	"       fabric registry validate <registry-dir>\n" +
 	"       fabric gateway <registry-dir> [--addr <addr>] [--log <path>] [--guardrail <policy-file>] [--limits <limits-file>]\n" +
+	"       fabric gateway-proxy <registry-dir> --upstream <url> [--addr <addr>] [--log <path>] [--guardrail <policy-file>] [--limits <limits-file>]\n" +
 	"       fabric collect <config-file> --ledger <path> [--once]\n" +
 	"       fabric release-gate <manifest-file> [--ledger <path>]\n" +
 	"       fabric crosswalk <crosswalk-file> <source-ledger> [--ledger <path>]\n" +
@@ -61,7 +63,7 @@ const usage = "usage: fabric <validate|report> <controls-dir>\n" +
 //	1 - validation found findings, or --strict assess found coverage gaps
 //	2 - usage or load error
 func run(args []string, out io.Writer) int {
-	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "collect": true, "release-gate": true, "crosswalk": true, "serve": true}
+	commands := map[string]bool{"validate": true, "report": true, "assess": true, "policies": true, "generate": true, "evidence": true, "policy-report": true, "drift": true, "trace": true, "eval-gate": true, "provenance": true, "sbom": true, "ledger": true, "registry": true, "gateway": true, "gateway-proxy": true, "collect": true, "release-gate": true, "crosswalk": true, "serve": true}
 	if len(args) < 1 || !commands[args[0]] {
 		fmt.Fprintln(out, usage)
 		return 2
@@ -75,6 +77,8 @@ func run(args []string, out io.Writer) int {
 	logPath := ""
 	guardrailPath := ""
 	limitsPath := ""
+	upstream := ""
+	isGateway := cmd == "gateway" || cmd == "gateway-proxy"
 	var positional []string
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
@@ -91,34 +95,41 @@ func run(args []string, out io.Writer) int {
 			}
 			i++
 			ledgerPath = rest[i]
-		case (cmd == "gateway" || cmd == "serve") && a == "--addr":
+		case (isGateway || cmd == "serve") && a == "--addr":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
 			}
 			i++
 			addr = rest[i]
-		case cmd == "gateway" && a == "--log":
+		case isGateway && a == "--log":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
 			}
 			i++
 			logPath = rest[i]
-		case cmd == "gateway" && a == "--guardrail":
+		case isGateway && a == "--guardrail":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
 			}
 			i++
 			guardrailPath = rest[i]
-		case cmd == "gateway" && a == "--limits":
+		case isGateway && a == "--limits":
 			if i+1 >= len(rest) {
 				fmt.Fprintln(out, usage)
 				return 2
 			}
 			i++
 			limitsPath = rest[i]
+		case cmd == "gateway-proxy" && a == "--upstream":
+			if i+1 >= len(rest) {
+				fmt.Fprintln(out, usage)
+				return 2
+			}
+			i++
+			upstream = rest[i]
 		default:
 			positional = append(positional, a)
 		}
@@ -208,6 +219,21 @@ func run(args []string, out io.Writer) int {
 			addr = ":8080"
 		}
 		return runGateway(positional[0], addr, logPath, guardrailPath, limitsPath, out)
+	}
+
+	// gateway-proxy runs the live-traffic enforcement point: it applies the same
+	// registry/guardrail/limit gates as gateway, but to the agent's real
+	// model/tool call on the wire, forwarding admitted requests to --upstream and
+	// blocking the rest before they ever reach it.
+	if cmd == "gateway-proxy" {
+		if len(positional) != 1 || upstream == "" {
+			fmt.Fprintln(out, usage)
+			return 2
+		}
+		if addr == "" {
+			addr = ":8080"
+		}
+		return runGatewayProxy(positional[0], upstream, addr, logPath, guardrailPath, limitsPath, out)
 	}
 
 	// collect runs the continuous collector: it polls every configured source,
@@ -592,43 +618,9 @@ func runTrace(tracesFile, registryDir, controlID, ledgerPath string, out io.Writ
 // admission decision and the log shape it writes are exercised by unit tests, so
 // this function only wires inputs to ListenAndServe.
 func runGateway(registryDir, addr, logPath, guardrailPath, limitsPath string, out io.Writer) int {
-	reg, err := registry.Load(registryDir)
-	if err != nil {
-		fmt.Fprintf(out, "error: %v\n", err)
+	reg, guard, limiter, ok := loadGatewayGates(registryDir, guardrailPath, limitsPath, out)
+	if !ok {
 		return 2
-	}
-
-	// A bad guardrail policy is caught here, before the listener binds, so the
-	// gateway never starts serving with an unparseable or uncompilable policy.
-	var guard gateway.Guardrail
-	if guardrailPath != "" {
-		policyData, err := os.ReadFile(guardrailPath)
-		if err != nil {
-			fmt.Fprintf(out, "error: %v\n", err)
-			return 2
-		}
-		var policy gateway.GuardrailPolicy
-		if err := json.Unmarshal(policyData, &policy); err != nil {
-			fmt.Fprintf(out, "error: %v\n", err)
-			return 2
-		}
-		guard, err = gateway.CompileGuardrail(policy)
-		if err != nil {
-			fmt.Fprintf(out, "error: %v\n", err)
-			return 2
-		}
-	}
-
-	// A bad limits file is caught here too, before the listener binds, so the
-	// gateway never starts serving with budgets it could not fully parse.
-	var limiter *gateway.Limiter
-	if limitsPath != "" {
-		limits, err := gateway.LoadLimits(limitsPath)
-		if err != nil {
-			fmt.Fprintf(out, "error: %v\n", err)
-			return 2
-		}
-		limiter = gateway.NewLimiter(limits)
 	}
 
 	var logw io.Writer
@@ -655,6 +647,98 @@ func runGateway(registryDir, addr, logPath, guardrailPath, limitsPath string, ou
 	}
 	fmt.Fprintln(out, ")")
 	if err := http.ListenAndServe(addr, srv); err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return 2
+	}
+	return 0
+}
+
+// loadGatewayGates loads the agent registry and compiles the optional content
+// guardrail and rate/cost limits that the inline gateway and the live proxy both
+// enforce. A bad registry, an unparseable or uncompilable guardrail, or a
+// malformed limits file is reported to out and returns ok=false, so neither
+// runner ever binds a listener with a gate it could not fully load.
+func loadGatewayGates(registryDir, guardrailPath, limitsPath string, out io.Writer) (registry.Registry, gateway.Guardrail, *gateway.Limiter, bool) {
+	reg, err := registry.Load(registryDir)
+	if err != nil {
+		fmt.Fprintf(out, "error: %v\n", err)
+		return registry.Registry{}, gateway.Guardrail{}, nil, false
+	}
+
+	var guard gateway.Guardrail
+	if guardrailPath != "" {
+		policyData, err := os.ReadFile(guardrailPath)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return registry.Registry{}, gateway.Guardrail{}, nil, false
+		}
+		var policy gateway.GuardrailPolicy
+		if err := json.Unmarshal(policyData, &policy); err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return registry.Registry{}, gateway.Guardrail{}, nil, false
+		}
+		guard, err = gateway.CompileGuardrail(policy)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return registry.Registry{}, gateway.Guardrail{}, nil, false
+		}
+	}
+
+	var limiter *gateway.Limiter
+	if limitsPath != "" {
+		limits, err := gateway.LoadLimits(limitsPath)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return registry.Registry{}, gateway.Guardrail{}, nil, false
+		}
+		limiter = gateway.NewLimiter(limits)
+	}
+
+	return reg, guard, limiter, true
+}
+
+// runGatewayProxy serves the live-traffic enforcement point until the process is
+// stopped: it forwards admitted interactions to the upstream model/tool endpoint
+// and blocks the rest before they reach it. Like runGateway this is the
+// irreducible network shell over the TDD-covered gateway.Proxy — the gates, the
+// wire-request extraction, and the forward/block decision are unit-tested, so
+// this only validates inputs and wires them to ListenAndServe.
+func runGatewayProxy(registryDir, upstream, addr, logPath, guardrailPath, limitsPath string, out io.Writer) int {
+	u, err := url.Parse(upstream)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		fmt.Fprintf(out, "error: invalid --upstream URL %q\n", upstream)
+		return 2
+	}
+
+	reg, guard, limiter, ok := loadGatewayGates(registryDir, guardrailPath, limitsPath, out)
+	if !ok {
+		return 2
+	}
+
+	var logw io.Writer
+	if logPath != "" {
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+		if err != nil {
+			fmt.Fprintf(out, "error: %v\n", err)
+			return 2
+		}
+		defer f.Close()
+		logw = f
+	}
+
+	p := &gateway.Proxy{Registry: reg, Guardrail: guard, Limiter: limiter, Upstream: u, Log: logw}
+	fmt.Fprintf(out, "agent gateway proxy listening on %s (registry %s, upstream %s", addr, registryDir, upstream)
+	if guardrailPath != "" {
+		fmt.Fprintf(out, ", guardrail %s", guardrailPath)
+	}
+	if limitsPath != "" {
+		fmt.Fprintf(out, ", limits %s", limitsPath)
+	}
+	if logPath != "" {
+		fmt.Fprintf(out, ", log %s", logPath)
+	}
+	fmt.Fprintln(out, ")")
+	if err := http.ListenAndServe(addr, p); err != nil {
 		fmt.Fprintf(out, "error: %v\n", err)
 		return 2
 	}

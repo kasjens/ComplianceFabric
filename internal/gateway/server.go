@@ -141,8 +141,14 @@ func (s *Server) serveOutput(w http.ResponseWriter, r *http.Request) {
 // the single time source for both the limiter charge and the log timestamp of an
 // interaction, so a request's budget window and its logged time agree.
 func (s *Server) now() time.Time {
-	if s.Now != nil {
-		return s.Now()
+	return clock(s.Now)
+}
+
+// clock returns now() when set, otherwise time.Now — the one place the gateway's
+// injectable clock defaults, shared by the inline Server and the live Proxy.
+func clock(now func() time.Time) time.Time {
+	if now != nil {
+		return now()
 	}
 	return time.Now()
 }
@@ -163,15 +169,24 @@ func respond(w http.ResponseWriter, decision Decision) {
 // the log cannot itself leak the sensitive data a guardrail caught. The timestamp
 // is stamped here from Now (defaulting to time.Now).
 func (s *Server) writeLog(entry logEntry) {
-	if s.Log == nil {
+	writeLogLine(s.Log, &s.mu, s.now(), entry)
+}
+
+// writeLogLine stamps an interaction entry with t and appends it as one JSON line
+// to w under mu, if w is non-nil. It is the shared log writer for the inline
+// Server and the live Proxy: both emit the same JSON-lines shape the trace
+// evidence producer consumes, and both record only the verdict — never the raw
+// input or output, which may itself be the sensitive data a guardrail caught.
+func writeLogLine(w io.Writer, mu *sync.Mutex, t time.Time, entry logEntry) {
+	if w == nil {
 		return
 	}
-	entry.Timestamp = s.now().UTC()
+	entry.Timestamp = t.UTC()
 	line, err := json.Marshal(entry)
 	if err != nil {
 		return
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, _ = s.Log.Write(append(line, '\n'))
+	mu.Lock()
+	defer mu.Unlock()
+	_, _ = w.Write(append(line, '\n'))
 }
