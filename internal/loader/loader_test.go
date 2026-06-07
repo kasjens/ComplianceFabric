@@ -52,6 +52,34 @@ func TestLoadReadsEachModelType(t *testing.T) {
 	}
 }
 
+func TestLoadReadsCrosswalks(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "catalogs", "annex11.json"), `{
+		"id": "annex11",
+		"metadata": {"title": "Annex 11", "version": "1.0.0"},
+		"controls": [{"id": "annex11-9-audit-trail", "title": "Audit trail"}]
+	}`)
+	writeFile(t, filepath.Join(root, "crosswalks", "dora.json"), `{
+		"metadata": {"title": "DORA crosswalk", "version": "0.1.0"},
+		"mappings": [{"control": "dora-9-4-d-audit-trail", "satisfied-by": ["annex11-9-audit-trail"]}]
+	}`)
+
+	b, err := Load(root)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(b.Crosswalks) != 1 {
+		t.Fatalf("crosswalks = %d, want 1", len(b.Crosswalks))
+	}
+	cw := b.Crosswalks[0]
+	if len(cw.Mappings) != 1 || cw.Mappings[0].Control != "dora-9-4-d-audit-trail" {
+		t.Errorf("crosswalk mappings = %+v, want one mapping for dora-9-4-d-audit-trail", cw.Mappings)
+	}
+	if len(cw.Mappings) == 1 && (len(cw.Mappings[0].SatisfiedBy) != 1 || cw.Mappings[0].SatisfiedBy[0] != "annex11-9-audit-trail") {
+		t.Errorf("crosswalk satisfied-by = %+v, want [annex11-9-audit-trail]", cw.Mappings[0].SatisfiedBy)
+	}
+}
+
 func TestLoadRejectsMalformedJSON(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "catalogs", "broken.json"), `{ not valid json `)

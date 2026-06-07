@@ -7,6 +7,7 @@ package validate
 import (
 	"strconv"
 
+	"github.com/kasjens/ComplianceFabric/internal/crosswalk"
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 )
 
@@ -15,6 +16,7 @@ type Bundle struct {
 	Catalogs             []oscal.Catalog
 	Profiles             []oscal.Profile
 	ComponentDefinitions []oscal.ComponentDefinition
+	Crosswalks           []crosswalk.Crosswalk
 }
 
 // Severity classifies a finding.
@@ -41,6 +43,65 @@ func Run(b Bundle) []Finding {
 	findings = append(findings, checkNoDuplicateControlIDs(b)...)
 	findings = append(findings, checkProfileCoverage(b)...)
 	findings = append(findings, checkRuleReferences(b)...)
+	findings = append(findings, checkCrosswalkMappings(b)...)
+	return findings
+}
+
+// checkCrosswalkMappings verifies every crosswalk is internally consistent
+// against the catalogs: each mapping answers at least one anchor
+// (crosswalk-empty-mapping), the target citation it answers is a real control in
+// some catalog (crosswalk-unresolved-target), every anchor it claims answers it
+// resolves to a real control (crosswalk-unresolved-anchor), and no target
+// citation is mapped more than once across all crosswalks
+// (crosswalk-duplicate-target). A crosswalk reuses one framework's evidence to
+// answer another's citation, so a typo in an anchor id would silently make a
+// citation un-satisfiable; these checks catch it at validate time, the same
+// rigor profiles and component definitions already get.
+func checkCrosswalkMappings(b Bundle) []Finding {
+	known := allControlIDs(b)
+	var findings []Finding
+	seenTarget := map[string]int{}
+	for _, cw := range b.Crosswalks {
+		for _, m := range cw.Mappings {
+			if len(m.SatisfiedBy) == 0 {
+				findings = append(findings, Finding{
+					Rule:      "crosswalk-empty-mapping",
+					Severity:  Error,
+					ControlID: m.Control,
+					Message:   "crosswalk maps citation " + m.Control + " to no anchor control",
+				})
+			}
+			if !known[m.Control] {
+				findings = append(findings, Finding{
+					Rule:      "crosswalk-unresolved-target",
+					Severity:  Error,
+					ControlID: m.Control,
+					Message:   "crosswalk target citation " + m.Control + " is not defined in any catalog",
+				})
+			}
+			for _, anchor := range m.SatisfiedBy {
+				if !known[anchor] {
+					findings = append(findings, Finding{
+						Rule:      "crosswalk-unresolved-anchor",
+						Severity:  Error,
+						ControlID: anchor,
+						Message:   "crosswalk citation " + m.Control + " is answered by control " + anchor + " not defined in any catalog",
+					})
+				}
+			}
+			seenTarget[m.Control]++
+		}
+	}
+	for target, n := range seenTarget {
+		if n > 1 {
+			findings = append(findings, Finding{
+				Rule:      "crosswalk-duplicate-target",
+				Severity:  Error,
+				ControlID: target,
+				Message:   "crosswalk target citation " + target + " is mapped " + strconv.Itoa(n) + " times",
+			})
+		}
+	}
 	return findings
 }
 

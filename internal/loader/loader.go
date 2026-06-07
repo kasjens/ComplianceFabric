@@ -4,6 +4,7 @@
 //	<root>/catalogs/*.json
 //	<root>/profiles/*.json
 //	<root>/component-definitions/*.json
+//	<root>/crosswalks/*.json
 package loader
 
 import (
@@ -12,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/kasjens/ComplianceFabric/internal/crosswalk"
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 	"github.com/kasjens/ComplianceFabric/internal/validate"
 )
@@ -49,6 +51,17 @@ func Load(root string) (validate.Bundle, error) {
 			return err
 		}
 		b.ComponentDefinitions = append(b.ComponentDefinitions, cd)
+		return nil
+	}); err != nil {
+		return validate.Bundle{}, err
+	}
+
+	if err := loadDir(filepath.Join(root, "crosswalks"), func(data []byte) error {
+		var cw crosswalk.Crosswalk
+		if err := json.Unmarshal(data, &cw); err != nil {
+			return err
+		}
+		b.Crosswalks = append(b.Crosswalks, cw)
 		return nil
 	}); err != nil {
 		return validate.Bundle{}, err
