@@ -19,14 +19,25 @@
 #                  returns a secret, the proxy blocks it on the way back (HTTP
 #                  403) and the secret never reaches the agent; a clean response
 #                  passes through unchanged.
-#   6. NO LEAK   - the interaction log records every verdict but NEVER the raw
+#   6. STREAM    - a clean streamed (SSE) response reaches the agent intact, and
+#                  a CRLF-terminated stream streams too rather than degrading to
+#                  full buffering.
+#   7. SPLIT     - a secret split across two SSE events is CUT mid-stream. Each
+#                  event is clean on its own; only the reassembled stream matches,
+#                  which is exactly how token-by-token streaming would smuggle a
+#                  secret past per-event screening. The agent must never be able
+#                  to rebuild it.
+#   8. NO LEAK   - the interaction log records every verdict but NEVER the raw
 #                  request input or the screened response content.
-#   7. EVIDENCE  - the proxy's own interaction log is consumed verbatim by
+#   9. EVIDENCE  - the proxy's own interaction log is consumed verbatim by
 #                  `fabric trace`, rolling up as ledger evidence: the admitted
 #                  request/response phases are satisfied, and every blocked phase
 #                  (registration, guardrail, model, and the response block) is
 #                  not-satisfied, so what the proxy enforced on live traffic is
-#                  faithful in the audit trail.
+#                  faithful in the audit trail. Each interaction yields exactly
+#                  ONE record: the input and output phases share an interaction
+#                  id and collapse, worst verdict winning, so auditor-facing
+#                  counts are not inflated by counting phases.
 #
 # This is the proof that the one part of the proxy outside the unit tests - the
 # ListenAndServe network shell and the real reverse-proxy forwarding - actually
@@ -53,6 +64,11 @@ LOG="$WORK/interactions.log"
 GUARDRAIL="$WORK/guardrail.json"
 UPSTREAM_SRC="$WORK/upstream.go"
 SECRET="AKIAIOSFODNN7EXAMPLE"
+# The same secret cut in two. Each half is clean under the guardrail pattern; only
+# the reassembled stream matches, which is exactly how token-by-token streaming
+# would smuggle it past per-event screening.
+SPLIT_HEAD="AKIA"
+SPLIT_TAIL="IOSFODNN7EXAMPLE"
 CLEAN_REPLY="PR 42 satisfies change control"
 
 PROXY_PID=""
@@ -107,15 +123,40 @@ package main
 import (
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/leak" {
-			_, _ = w.Write([]byte("the deploy key is ${SECRET}"))
-			return
+	// sse writes each chunk as its own event, flushing between them, which is
+	// how a model streams a completion token by token.
+	sse := func(w http.ResponseWriter, sep string, chunks []string) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		f, _ := w.(http.Flusher)
+		for _, c := range chunks {
+			_, _ = w.Write([]byte("data: {\\"delta\\":{\\"text\\":\\"" + c + "\\"}}" + sep))
+			if f != nil {
+				f.Flush()
+			}
+			time.Sleep(20 * time.Millisecond)
 		}
-		_, _ = w.Write([]byte("${CLEAN_REPLY}"))
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/leak":
+			_, _ = w.Write([]byte("the deploy key is ${SECRET}"))
+		case "/stream-clean":
+			sse(w, "\n\n", []string{"PR 42 ", "satisfies ", "change control"})
+		case "/stream-crlf":
+			sse(w, "\r\n\r\n", []string{"PR 42 ", "satisfies ", "change control"})
+		case "/stream-split":
+			// Neither event matches AKIA[0-9A-Z]{16} on its own; only the
+			// reassembled stream does.
+			sse(w, "\n\n", []string{"${SPLIT_HEAD}", "${SPLIT_TAIL}"})
+		default:
+			_, _ = w.Write([]byte("${CLEAN_REPLY}"))
+		}
 	})
 	_ = http.ListenAndServe(os.Args[1], nil)
 }
@@ -189,7 +230,53 @@ grep -qF "$SECRET" "$WORK/body.json" && fail "the secret-bearing response reache
 echo "PASS: secret in the model's response blocked on the way back, never reaching the agent"
 
 # ---------------------------------------------------------------------------
-log "6. NO LEAK: the log records verdicts but never the raw input or response"
+log "6. STREAM: a clean SSE response is forwarded to the agent intact"
+# ---------------------------------------------------------------------------
+# Streamed responses take a different code path from buffered ones: events are
+# screened and released one at a time. A clean stream must arrive complete.
+stream() {
+  local path="$1"
+  curl -s -N -o "$WORK/stream.txt" -w '%{http_code}' -X POST "$ADDR$path"     -H "X-Fabric-Agent: release-reviewer"     -H "X-Fabric-Prompt: change-control-review"     -d "$(clean_body)"
+}
+
+code="$(stream /stream-clean)"
+cat "$WORK/stream.txt"; echo
+[ "$code" = "200" ] || fail "expected HTTP 200 for a clean stream, got $code"
+grep -q 'satisfies' "$WORK/stream.txt" || fail "clean stream did not reach the agent intact"
+echo "PASS: clean SSE stream forwarded to the agent"
+
+# ---------------------------------------------------------------------------
+log "7. STREAM: a CRLF-terminated SSE response still streams"
+# ---------------------------------------------------------------------------
+# SSE permits CRLF as an event terminator, not just LF. Recognising only the LF
+# form made the proxy buffer such a stream whole instead of releasing it event
+# by event, so streaming was silently lost against a CRLF upstream.
+code="$(stream /stream-crlf)"
+cat "$WORK/stream.txt"; echo
+[ "$code" = "200" ] || fail "expected HTTP 200 for a CRLF stream, got $code"
+grep -q 'satisfies' "$WORK/stream.txt" || fail "CRLF stream did not reach the agent"
+echo "PASS: CRLF-terminated SSE stream forwarded"
+
+# ---------------------------------------------------------------------------
+log "8. STREAM: a secret split across two events is cut mid-stream"
+# ---------------------------------------------------------------------------
+# This is the assertion that matters most. Each event is individually clean under
+# AKIA[0-9A-Z]{16}; only the reassembled stream matches. Screening events in
+# isolation would forward both halves and let the agent rebuild the key.
+stream /stream-split >/dev/null || true
+echo "--- what the agent received ---"
+cat "$WORK/stream.txt"; echo
+
+# Reassemble exactly as an SSE client would: concatenate the delta text.
+reassembled="$(tr -d '\r' < "$WORK/stream.txt" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p' | tr -d '\n')"
+echo "reassembled: [$reassembled]"
+case "$reassembled" in
+  *"$SECRET"*) fail "the agent reassembled the full secret from individually-clean SSE events" ;;
+esac
+echo "PASS: split secret never completed - the stream was cut before the second event"
+
+# ---------------------------------------------------------------------------
+log "9. NO LEAK: the log records verdicts but never the raw input or response"
 # ---------------------------------------------------------------------------
 grep -qF "$SECRET" "$LOG" && fail "raw guardrail-caught content leaked into the log"
 echo "PASS: log records the verdict but never the secret (request input or response)"
@@ -198,7 +285,7 @@ echo "--- interaction log ---"
 cat "$LOG"
 
 # ---------------------------------------------------------------------------
-log "7. EVIDENCE: proxy log -> fabric trace -> ledger"
+log "10. EVIDENCE: proxy log -> fabric trace -> ledger"
 # ---------------------------------------------------------------------------
 ledger="$WORK/agent.ledger"
 records="$WORK/records.json"
@@ -211,18 +298,26 @@ set -e
 echo "--- evidence records ---"
 cat "$records"
 
-# The forwarded clean interaction logs two satisfied phases (input admission and a
-# clean response), and the response-screened interaction logs a satisfied input
-# (it forwarded) plus a not-satisfied output (the response was blocked) -> 3
-# satisfied. The three request-side blocks (registration, guardrail, model) plus
-# the one response block -> 4 not-satisfied. Every block being not-satisfied is
-# the fidelity guarantee: a call the proxy blocked on content, model, or
-# registration does not roll up as satisfied just because the agent was registered.
+# ONE record per interaction, not one per logged phase. The proxy writes an input
+# and an output line sharing an interaction id, and the evidence producer collapses
+# them with the worst verdict winning. Counting phases instead would inflate every
+# auditor-facing number roughly twofold and, worse, emit BOTH a satisfied and a
+# not-satisfied record for a single interaction whose response was blocked.
+#
+# Eight interactions run above:
+#   satisfied     - the forwarded call, the clean SSE stream, the CRLF SSE stream
+#   not-satisfied - unregistered agent, request guardrail, off-list model,
+#                   secret in the buffered response, secret split across SSE events
+#
+# Every block being not-satisfied is the fidelity guarantee: a call the proxy
+# stopped does not roll up as satisfied just because the agent was registered.
 sat="$(grep -c '"result": "satisfied"' "$records" || true)"
 notsat="$(grep -c '"result": "not-satisfied"' "$records" || true)"
 [ "$sat" = "3" ]    || fail "expected 3 satisfied records, got $sat"
-[ "$notsat" = "4" ] || fail "expected 4 not-satisfied records, got $notsat"
-echo "PASS: 3 satisfied, 4 not-satisfied (registration + guardrail + model + response blocks all recorded)"
+[ "$notsat" = "5" ] || fail "expected 5 not-satisfied records, got $notsat"
+total=$((sat + notsat))
+[ "$total" = "8" ] || fail "expected 8 records for 8 interactions, got $total"
+echo "PASS: 8 interactions -> 8 records (3 satisfied, 5 not-satisfied), one per interaction"
 
 "$FABRIC" ledger verify "$ledger" || fail "ledger chain verification failed"
 echo "PASS: ledger chain intact"

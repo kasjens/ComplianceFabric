@@ -50,6 +50,25 @@ jobs:
       - name: Compose deployable policy set
         run: go run ./cmd/fabric generate controls policies "$(mktemp -d)"
 
+  commands-e2e:
+    name: Every CLI subcommand runs
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # Eight commands were covered by go test but never executed as the real
+      # binary. A unit test proves a function; it does not prove the command
+      # wired to it parses its flags, finds its inputs, and exits with the code
+      # the pipeline branches on.
+      - name: Prove report, drift, eval-gate, ledger, registry, collect, crosswalk and serve
+        run: bash test/e2e/commands.sh
+
   gateway-e2e:
     name: Phase 4 inline gateway e2e
     runs-on: ubuntu-latest

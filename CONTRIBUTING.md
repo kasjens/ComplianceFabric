@@ -25,6 +25,14 @@ If you plan a large change, open an issue first so the direction can be agreed b
 3. Make focused commits. One logical change per commit.
 4. Open a pull request against `main` and fill in the template.
 
+## What CI runs on your pull request
+
+Locally, `go test -race ./...` is the whole unit suite and needs nothing but Go — the build is stdlib-only. The suite runs on Linux, macOS and Windows; if you add a test, keep it portable (embed paths in JSON fixtures through the `jsonPath` helper rather than raw, and do not shell out to tools that only exist on one platform).
+
+Beyond the unit suite, CI runs end-to-end jobs that drive the real `fabric` binary: live admission against a kind cluster, the inline gateway and the live gateway proxy, the SBOM and release-gate paths with syft, and a job that exercises every CLI subcommand.
+
+**One job cannot run on a pull request from a fork: `keyless-e2e`.** It proves Sigstore keyless signature verification by signing a test image with the repository's own GitHub Actions OIDC identity, and a fork cannot mint that identity — so the job is skipped rather than failed there. This means **a fork PR does not get the keyless proof**, and a maintainer runs it on the branch before merging anything that touches image-signature policy or the admission path. If your change is in that area, say so in the PR description so it gets that check.
+
 ## Sign your commits
 
 This project uses the Developer Certificate of Origin (DCO). Sign off every commit:

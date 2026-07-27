@@ -2,7 +2,9 @@ package gateway
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/subtle"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -191,6 +193,14 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Give the interaction an id if the extractor did not. The input and output
+	// phases of one interaction are logged as separate lines, and the id is what
+	// binds them: without it the evidence producer cannot tell two phases of one
+	// interaction from two interactions, and every proxied call counts twice.
+	if req.ID == "" {
+		req.ID = newInteractionID()
+	}
+
 	// Authenticate the asserted identity before any gate keyed on it runs. Every
 	// downstream decision — registry qualification, the model and tool
 	// allow-lists, the rate and cost budget — trusts req.Agent, so if the claim
@@ -306,6 +316,18 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rp.ServeHTTP(w, r)
+}
+
+// newInteractionID returns a random id binding the phases of one interaction.
+// It is an opaque correlation handle, not a security token; if the random source
+// fails it degrades to a fixed value, which correlates worse but never blocks a
+// request over a logging concern.
+func newInteractionID() string {
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "interaction"
+	}
+	return hex.EncodeToString(b[:])
 }
 
 // authenticate reports whether the caller may act as the named agent. With no
