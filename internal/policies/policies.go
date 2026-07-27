@@ -3,6 +3,7 @@ package policies
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/kasjens/ComplianceFabric/internal/validate"
@@ -13,7 +14,14 @@ const annotationKey = "fabric.control-id:"
 // ExtractControlIDs scans a Kyverno policy document for the fabric.control-id
 // annotation and returns the control IDs it declares. The value may be a single
 // ID or a quoted, comma-separated list. Returns nil when the annotation is absent.
+//
+// A YAML file may hold several documents separated by "---", each its own policy
+// with its own annotation. Every annotation in the file is read: returning at the
+// first one silently dropped the control mapping of every later document, which
+// looks identical to that policy simply not being mapped.
 func ExtractControlIDs(doc []byte) []string {
+	var ids []string
+	seen := map[string]bool{}
 	for _, line := range strings.Split(string(doc), "\n") {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, annotationKey) {
@@ -21,15 +29,16 @@ func ExtractControlIDs(doc []byte) []string {
 		}
 		value := strings.TrimSpace(trimmed[len(annotationKey):])
 		value = strings.Trim(value, "\"'")
-		var ids []string
 		for _, part := range strings.Split(value, ",") {
-			if id := strings.TrimSpace(part); id != "" {
-				ids = append(ids, id)
+			id := strings.TrimSpace(part)
+			if id == "" || seen[id] {
+				continue
 			}
+			seen[id] = true
+			ids = append(ids, id)
 		}
-		return ids
 	}
-	return nil
+	return ids
 }
 
 // ControlsByPolicy scans policiesDir/kyverno/*.yaml and returns a map from each
@@ -38,10 +47,28 @@ func ExtractControlIDs(doc []byte) []string {
 // annotates with fabric.control-id. Policies without the annotation are omitted.
 // A missing kyverno directory yields an empty map, not an error.
 func ControlsByPolicy(policiesDir string) (map[string][]string, error) {
-	matches, err := filepath.Glob(filepath.Join(policiesDir, "kyverno", "*.yaml"))
+	// Listed rather than globbed. filepath.Glob treats the DIRECTORY part of its
+	// pattern as a pattern too, so a perfectly ordinary path containing a glob
+	// metacharacter — a Jenkins workspace like "workspace[1]" is the usual way to
+	// meet this — matches nothing and returns (nil, nil). That is a green
+	// traceability check that verified no policies at all.
+	kyvernoDir := filepath.Join(policiesDir, "kyverno")
+	entries, err := os.ReadDir(kyvernoDir)
+	if os.IsNotExist(err) {
+		return map[string][]string{}, nil
+	}
 	if err != nil {
 		return nil, err
 	}
+	var matches []string
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		matches = append(matches, filepath.Join(kyvernoDir, e.Name()))
+	}
+	sort.Strings(matches)
+
 	out := make(map[string][]string)
 	for _, path := range matches {
 		doc, err := os.ReadFile(path)

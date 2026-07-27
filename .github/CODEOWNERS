@@ -1,0 +1,19 @@
+# Every change gets a maintainer review; see MAINTAINERS.md and GOVERNANCE.md.
+*                       @kasjens
+
+# Control data produces evidence. A wrong mapping produces wrong evidence that
+# looks exactly as authoritative as a right one, so these paths are called out
+# explicitly rather than left to the catch-all above.
+/controls/              @kasjens
+/policies/              @kasjens
+/registry/              @kasjens
+
+# The enforcement points and the evidence store: a regression here is a control
+# that silently stops controlling.
+/internal/gateway/      @kasjens
+/internal/ledger/       @kasjens
+
+# Supply-chain and CI configuration runs with repository credentials and, on
+# release, with an OIDC signing identity.
+/.github/               @kasjens
+/release/               @kasjens

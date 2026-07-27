@@ -57,6 +57,19 @@ func (g Guardrail) active() bool {
 // Screen returns a deny Decision naming the first rule the input matches, or an
 // allow Decision when no rule matches. The rules are checked in policy order, so
 // the most specific or highest-priority rule should be listed first.
+// Screen tests input against every compiled rule and returns the first match as a
+// denial.
+//
+// Matching is exactly what the rule's regexp says: patterns are applied as
+// written, with no case folding, no unicode normalisation, no whitespace
+// stripping, and no base64 decoding. A rule author who wants case-insensitive
+// matching writes `(?i)` into the pattern.
+//
+// This is a deliberate floor, and it is worth being clear about what it does not
+// do. A guardrail is a net for accidental disclosure and known-shape secrets, not
+// a defence against an agent that is actively trying to evade it: content can be
+// re-encoded, transliterated, or split across turns in ways no regexp set will
+// catch. Treat it as one control among several, not as the boundary.
 func (g Guardrail) Screen(input string) Decision {
 	for _, r := range g.rules {
 		if r.re.MatchString(input) {

@@ -81,7 +81,11 @@ func loadDir(dir string, parse func([]byte) error) error {
 		return err
 	}
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+		// Only regular files. e.IsDir() is false for a SYMLINK, so a symlinked
+		// .json in a catalog directory was followed and loaded as control data —
+		// letting a link point control content anywhere on the host, outside the
+		// reviewed control tree.
+		if !e.Type().IsRegular() || filepath.Ext(e.Name()) != ".json" {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())

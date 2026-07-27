@@ -65,12 +65,18 @@ func (c *Collector) Tick() ([]evidence.Record, error) {
 		observed = append(observed, recs...)
 	}
 
+	// Report the records actually APPENDED, not everything that changed. Returning
+	// the full changed set after a mid-loop append failure made the caller log
+	// records the ledger does not contain — an operator reading that log would
+	// believe evidence was recorded when it was not.
 	changed := Dedup(prior, observed)
+	appended := make([]evidence.Record, 0, len(changed))
 	for _, r := range changed {
 		if _, err := c.Ledger.Append(r); err != nil {
 			errs = append(errs, fmt.Errorf("append: %w", err))
-			return changed, errors.Join(errs...)
+			return appended, errors.Join(errs...)
 		}
+		appended = append(appended, r)
 	}
-	return changed, errors.Join(errs...)
+	return appended, errors.Join(errs...)
 }

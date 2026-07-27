@@ -1,0 +1,16 @@
+version: 2
+
+updates:
+  # The Go module is stdlib-only by design (ADR-0004), so there are no Go
+  # dependencies to track. GitHub Actions are the project's real dependency
+  # surface: they run with repository credentials and, in the release workflow,
+  # with an OIDC identity that can mint signing certificates.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    labels:
+      - dependencies

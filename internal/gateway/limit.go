@@ -76,6 +76,16 @@ type Limiter struct {
 	state  map[string]*window
 }
 
+// window is one agent's current FIXED window, not a sliding one. The window
+// starts at the first charge and resets wholesale once it elapses, so an agent
+// that spends its full budget at the end of one window and again at the start of
+// the next can run up to twice MaxRequests (and twice MaxCost) across that
+// boundary. That is the standard fixed-window trade: it costs one timestamp and
+// one counter per agent instead of retaining per-request history. Where a hard
+// ceiling over any rolling interval is required, this needs to become a sliding
+// window; the budget is a guardrail against runaway volume and spend, not a
+// billing control.
+//
 // window is one agent's current fixed-window tally: when the window started and
 // how many requests and how much cost have been charged in it.
 type window struct {
