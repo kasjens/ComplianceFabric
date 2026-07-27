@@ -6,6 +6,8 @@
 // deliberately small; tests drive what gets added.
 package oscal
 
+import "sort"
+
 // Metadata is the small descriptive header shared by every OSCAL document.
 type Metadata struct {
 	Title   string `json:"title"`
@@ -115,11 +117,51 @@ func (c Component) ruleChecks() map[string]string {
 			groupCheck[p.Remarks] = p.Value
 		}
 	}
+	// Resolve in a deterministic order. Iterating groupRule directly meant that
+	// when two rule-set groups declared the SAME Rule_Id with different Check_Ids,
+	// which one won depended on Go's randomised map iteration - so `fabric
+	// generate` composed a different policy set from byte-identical inputs.
+	// Duplicates remain a defect in the source data (DuplicateRuleIDs reports
+	// them); resolving them by lowest group key at least makes output
+	// reproducible.
+	groups := make([]string, 0, len(groupRule))
+	for group := range groupRule {
+		groups = append(groups, group)
+	}
+	sort.Strings(groups)
+
 	checks := map[string]string{}
-	for group, rule := range groupRule {
+	assignedBy := map[string]string{}
+	for _, group := range groups {
+		rule := groupRule[group]
+		if _, taken := checks[rule]; taken && assignedBy[rule] <= group {
+			continue
+		}
 		checks[rule] = groupCheck[group]
+		assignedBy[rule] = group
 	}
 	return checks
+}
+
+// DuplicateRuleIDs returns every Rule_Id the component declares more than once,
+// sorted. A duplicate is ambiguous by construction: two rule sets claim the same
+// rule name with potentially different checks, so the composed policy set depends
+// on which declaration wins. Callers should reject a component that reports any.
+func (c Component) DuplicateRuleIDs() []string {
+	counts := map[string]int{}
+	for _, p := range c.Props {
+		if p.Name == "Rule_Id" {
+			counts[p.Value]++
+		}
+	}
+	var dupes []string
+	for rule, n := range counts {
+		if n > 1 {
+			dupes = append(dupes, rule)
+		}
+	}
+	sort.Strings(dupes)
+	return dupes
 }
 
 // ControlPolicies resolves every control's Rule_Id references down to the

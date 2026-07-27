@@ -14,6 +14,31 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/validate"
 )
 
+// validateCheckID rejects a check id that is not a plain file stem. Check_Id is
+// a raw prop value from GitOps-authored component-definition JSON, and it is used
+// to build both a read path in the policy library and a write path in the output
+// directory. filepath.Join CLEANS "../" rather than rejecting it, so an
+// unvalidated value escapes both directories - letting authored control content
+// read arbitrary files and write them back out with mode 0644.
+func validateCheckID(check string) error {
+	if check == "" {
+		return fmt.Errorf("check id is empty")
+	}
+	if check != filepath.Base(check) {
+		return fmt.Errorf("check id %q must be a plain file name", check)
+	}
+	if check == "." || check == ".." {
+		return fmt.Errorf("check id %q is not a valid file name", check)
+	}
+	if filepath.IsAbs(check) || strings.ContainsAny(check, `/\`) {
+		return fmt.Errorf("check id %q must not contain a path", check)
+	}
+	if strings.Contains(check, "..") {
+		return fmt.Errorf("check id %q must not contain %q", check, "..")
+	}
+	return nil
+}
+
 // Policy is one composed Kyverno policy: its check (file stem) and the resource
 // body read from the policy library.
 type Policy struct {
@@ -56,6 +81,9 @@ func Compose(b validate.Bundle, policiesDir string) (Result, error) {
 				continue
 			}
 			seen[check] = true
+			if err := validateCheckID(check); err != nil {
+				return Result{}, fmt.Errorf("control %s: %w", control, err)
+			}
 			path := filepath.Join(policiesDir, "kyverno", check+".yaml")
 			body, err := os.ReadFile(path)
 			if err != nil {
@@ -78,6 +106,11 @@ func Write(r Result, outDir string) error {
 		return err
 	}
 	for _, p := range r.Policies {
+		// Revalidated here rather than trusted from Compose: Write is exported and
+		// a Result can be built by any caller.
+		if err := validateCheckID(p.CheckID); err != nil {
+			return err
+		}
 		if err := os.WriteFile(filepath.Join(kdir, p.CheckID+".yaml"), p.Body, 0o644); err != nil {
 			return err
 		}

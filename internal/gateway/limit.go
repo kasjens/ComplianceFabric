@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"sync"
@@ -101,6 +102,15 @@ func (l *Limiter) Charge(agent string, cost float64, now time.Time) Decision {
 	lim, ok := l.limits[agent]
 	if !ok {
 		return Decision{Allowed: true}
+	}
+
+	// Defended here as well as at header extraction: Charge is exported and the
+	// limiter must never be reachable in a state where its budget comparison is
+	// vacuous. A NaN charge would otherwise be allowed and make w.cost NaN for
+	// the rest of the window - permanently, for a lifetime budget (Window == 0).
+	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost < 0 {
+		return Decision{Allowed: false, Reason: "agent " + agent +
+			" supplied an invalid cost; it must be a finite, non-negative number"}
 	}
 
 	l.mu.Lock()

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -47,6 +48,13 @@ func RequestFromHTTP(r *http.Request) (Request, error) {
 		cost, err := strconv.ParseFloat(c, 64)
 		if err != nil {
 			return Request{}, fmt.Errorf("invalid %s header: %w", HeaderCost, err)
+		}
+		// ParseFloat accepts "NaN", "Inf" and negatives. A NaN cost makes every
+		// budget comparison false (so it is allowed AND poisons the window's
+		// running total), and a negative cost refunds budget outright. Either
+		// way the caller would control its own limit.
+		if math.IsNaN(cost) || math.IsInf(cost, 0) || cost < 0 {
+			return Request{}, fmt.Errorf("invalid %s header: cost must be a finite, non-negative number", HeaderCost)
 		}
 		req.Cost = cost
 	}

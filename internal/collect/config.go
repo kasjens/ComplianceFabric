@@ -55,6 +55,13 @@ func LoadConfig(path string) (Config, error) {
 	if err != nil {
 		return Config{}, fmt.Errorf("interval %q: %w", spec.Interval, err)
 	}
+	// ParseDuration accepts "0s" and "-30s", and time.NewTicker panics on a
+	// non-positive duration. Because `collect --once` never builds a ticker, an
+	// invalid interval would otherwise surface only in the long-running
+	// production path, as a crash.
+	if interval <= 0 {
+		return Config{}, fmt.Errorf("interval %q: must be greater than zero", spec.Interval)
+	}
 
 	cfg := Config{Interval: interval}
 	for i, s := range spec.Sources {
