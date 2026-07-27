@@ -8,6 +8,7 @@ package evidence
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
@@ -27,8 +28,13 @@ type ChangeRecord struct {
 
 // Issues returns the reasons this record is not a valid, attributable
 // change-control authorization. An empty result means the change is authorized:
-// merged, attributable to an author, reviewer-approved, and bound to a merge
-// commit and timestamp. A non-empty result is what a reviewer flags.
+// merged, attributable to an author, INDEPENDENTLY reviewer-approved, and bound
+// to a merge commit and timestamp. A non-empty result is what a reviewer flags.
+//
+// Independence is the point of the control. EU GMP Annex 11 and 21 CFR Part 11
+// require segregation of duties: the person who authorizes a change must not be
+// the person who made it. An approval from the author alone is therefore not an
+// approval, and counting it would mint false audit evidence.
 func (r ChangeRecord) Issues() []string {
 	var issues []string
 	if r.State != "MERGED" {
@@ -39,6 +45,8 @@ func (r ChangeRecord) Issues() []string {
 	}
 	if len(r.Approvers) == 0 {
 		issues = append(issues, "change has no approval")
+	} else if !r.hasIndependentApprover() {
+		issues = append(issues, "change has no approval from anyone other than its author")
 	}
 	if r.MergeCommit == "" {
 		issues = append(issues, "change has no merge commit")
@@ -47,6 +55,19 @@ func (r ChangeRecord) Issues() []string {
 		issues = append(issues, "change has no merge timestamp")
 	}
 	return issues
+}
+
+// hasIndependentApprover reports whether at least one approver is someone other
+// than the change's author. GitHub logins are case-insensitive, so "Alice"
+// approving her own PR as "alice" is still self-approval.
+func (r ChangeRecord) hasIndependentApprover() bool {
+	author := strings.ToLower(strings.TrimSpace(r.Author))
+	for _, a := range r.Approvers {
+		if strings.ToLower(strings.TrimSpace(a)) != author {
+			return true
+		}
+	}
+	return false
 }
 
 // Record is an evidence-ledger entry keyed to a control id, following the data
@@ -154,13 +175,26 @@ func Extract(prJSON []byte) (ChangeRecord, error) {
 		MergedAt:    pr.MergedAt,
 		MergeCommit: pr.MergeCommit.OID,
 	}
-	seen := map[string]bool{}
+	// Take each reviewer's LATEST decisive review state, not their first: an
+	// approval that was later withdrawn (CHANGES_REQUESTED, DISMISSED) is not an
+	// approval. COMMENTED is not a decision and leaves the standing state alone,
+	// matching GitHub's own review semantics.
+	latest := map[string]string{}
+	var order []string
 	for _, r := range pr.Reviews {
-		if r.State != "APPROVED" || seen[r.Author.Login] {
+		login := r.Author.Login
+		if login == "" || r.State == "COMMENTED" || r.State == "" {
 			continue
 		}
-		seen[r.Author.Login] = true
-		rec.Approvers = append(rec.Approvers, r.Author.Login)
+		if _, ok := latest[login]; !ok {
+			order = append(order, login)
+		}
+		latest[login] = r.State
+	}
+	for _, login := range order {
+		if latest[login] == "APPROVED" {
+			rec.Approvers = append(rec.Approvers, login)
+		}
 	}
 	return rec, nil
 }

@@ -34,6 +34,13 @@ func Coverage(b validate.Bundle) []ControlCoverage {
 	policies := make(map[string][]string)
 	for _, cd := range b.ComponentDefinitions {
 		for _, cp := range cd.ControlPolicies() {
+			// A rule declared with no Check_Id resolves to an empty policy id.
+			// That is the absence of enforcement, not enforcement: counting it
+			// would let a control report satisfied with nothing behind it.
+			// generate.Compose and policies.Verify both filter it; so must this.
+			if cp.PolicyID == "" {
+				continue
+			}
 			policies[cp.ControlID] = append(policies[cp.ControlID], cp.PolicyID)
 		}
 	}

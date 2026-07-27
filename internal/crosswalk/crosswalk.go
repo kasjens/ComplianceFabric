@@ -52,7 +52,14 @@ func Apply(records []evidence.Record, cw Crosswalk) []evidence.Record {
 
 	derived := make([]evidence.Record, 0, len(cw.Mappings))
 	for _, m := range cw.Mappings {
+		// A citation answered by NO anchors is not satisfied - it is unevidenced.
+		// Seeding the result as satisfied and relying on the loop to disprove it
+		// means a mapping with an empty (or misspelled, so absent) satisfied-by
+		// list claims compliance by vacuity, as of a zero timestamp.
 		result := oscal.StatusSatisfied
+		if len(m.SatisfiedBy) == 0 {
+			result = oscal.StatusNotSatisfied
+		}
 		var latest time.Time
 		for _, anchor := range m.SatisfiedBy {
 			cp, ok := status[anchor]

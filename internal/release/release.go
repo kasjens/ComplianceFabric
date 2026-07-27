@@ -98,7 +98,18 @@ func (m Manifest) Evidence() ([]evidence.Record, error) {
 		if err != nil {
 			return nil, fmt.Errorf("source %d (%s): %w", i, s.Type, err)
 		}
+		// A declared source that yields no evidence is the same vacuity
+		// LoadManifest already guards against one level up: the gate would find
+		// nothing unsatisfied and clear the release. An attestation with an empty
+		// subject, an Argo response with no items, or a policy report whose
+		// results are all unmapped must block, not pass.
+		if len(recs) == 0 {
+			return nil, fmt.Errorf("source %d (%s): produced no evidence records from %s", i, s.Type, s.File)
+		}
 		records = append(records, recs...)
+	}
+	if len(records) == 0 {
+		return nil, fmt.Errorf("manifest produced no evidence records")
 	}
 	return records, nil
 }
