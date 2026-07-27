@@ -2,6 +2,8 @@
 
 A continuous-compliance control and evidence layer for regulated Kubernetes platforms. Author controls once, enforce them as policy, and produce audit-ready evidence on demand.
 
+![Compliance Fabric concept overview: author once in OSCAL, enforce with Kyverno, record to a continuous evidence ledger, and crosswalk one control set to DORA, NIS2, and ISO/IEC 42001](compliance-fabric-concept-overview.png)
+
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 The Fabric targets life sciences first (GxP) and extends to other regulated sectors such as finance (DORA, NIS2). It builds on open standards and open-source projects already common in regulated platforms: OSCAL, Kyverno, OPA, Sigstore, and GitOps.
