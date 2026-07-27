@@ -7,14 +7,9 @@ import (
 	"time"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 4.2.
-//
-// Append calls Entries(), which re-reads and re-parses the ENTIRE file, before
-// every single write. Building a ledger of n records is therefore O(n^2), and
-// collector.Tick appends in a loop. This is a performance characteristic rather
-// than a correctness bug, so it is measured rather than asserted on a fixed
-// threshold: doubling the record count should roughly double the work (linear),
-// but quadratic growth quadruples it.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 func appendN(t *testing.T, n int) time.Duration {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "evidence.jsonl")
@@ -29,7 +24,7 @@ func appendN(t *testing.T, n int) time.Duration {
 	return time.Since(start)
 }
 
-func TestRepro42AppendScaling(t *testing.T) {
+func TestAppendScaling(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scaling measurement")
 	}

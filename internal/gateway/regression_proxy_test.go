@@ -6,7 +6,9 @@ import (
 	"testing"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 1.2. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // secret matches the guardrail rule the project ships.
 const secret = "AKIAIOSFODNN7EXAMPLE"
@@ -31,7 +33,7 @@ func akiaGuardrail(t *testing.T) Guardrail {
 //
 // Case (a) is the sharpest: in an agent loop, tool OUTPUT is where exfiltrated
 // data actually lives, and Anthropic carries it under `content`, not `text`.
-func TestRepro12BodyShapesMustNotEvadeScreening(t *testing.T) {
+func TestBodyShapesMustNotEvadeScreening(t *testing.T) {
 	g := akiaGuardrail(t)
 
 	cases := []struct {
@@ -87,7 +89,7 @@ func TestRepro12BodyShapesMustNotEvadeScreening(t *testing.T) {
 }
 
 // A malformed body must never be forwarded.
-func TestRepro12MalformedBodyMustFailClosed(t *testing.T) {
+func TestMalformedBodyMustFailClosed(t *testing.T) {
 	r, err := http.NewRequest(http.MethodPost, "http://upstream/v1/messages", strings.NewReader(`{"model":`))
 	if err != nil {
 		t.Fatal(err)

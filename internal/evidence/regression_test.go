@@ -7,8 +7,9 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 )
 
-// REPRODUCTION — Workstream R.2. These tests encode the BEHAVIOUR WE WANT and are
-// expected to FAIL against unmodified cac9f78. Each names the plan item it proves.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // merged returns an otherwise-valid merged change record, so that the only thing
 // under test is the approval relationship.
@@ -28,11 +29,11 @@ func merged(author string, approvers ...string) ChangeRecord {
 // 3.1 — Issues() counts approvers but never compares them to the author, so a PR
 // its own author approved is recorded as satisfied change control. Segregation of
 // duties is the entire point of the control under Annex 11 and Part 11.
-func TestRepro31SelfApprovalIsNotChangeControl(t *testing.T) {
+func TestSelfApprovalIsNotChangeControl(t *testing.T) {
 	cases := []struct {
-		name             string
-		rec              ChangeRecord
-		wantAuthorized   bool
+		name           string
+		rec            ChangeRecord
+		wantAuthorized bool
 	}{
 		{"self-approval only", merged("alice", "alice"), false},
 		{"self-approval, case-differing login", merged("Alice", "alice"), false},
@@ -62,7 +63,7 @@ func TestRepro31SelfApprovalIsNotChangeControl(t *testing.T) {
 // 3.2 — Extract documents "the distinct logins whose LATEST review state is
 // APPROVED", but the loop takes the FIRST state per login and skips the rest, so
 // an approval that was later withdrawn still counts.
-func TestRepro32WithdrawnApprovalMustNotCount(t *testing.T) {
+func TestWithdrawnApprovalMustNotCount(t *testing.T) {
 	cases := []struct {
 		name         string
 		reviews      string

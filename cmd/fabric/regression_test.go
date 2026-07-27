@@ -7,7 +7,9 @@ import (
 	"testing"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 2.3. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // LoadManifest deliberately guards against a manifest with NO SOURCES, because
 // that "would otherwise clear the gate by vacuity". It does not guard the same
@@ -15,7 +17,7 @@ import (
 // yields NO RECORDS. FromProvenance returns (nil, nil) for an attestation with an
 // empty subject, so the release gate sees zero records, finds nothing
 // unsatisfied, and clears the release.
-func TestRepro23ReleaseGateMustBlockOnZeroEvidence(t *testing.T) {
+func TestReleaseGateMustBlockOnZeroEvidence(t *testing.T) {
 	dir := t.TempDir()
 
 	// A syntactically valid in-toto statement from the expected builder, but with

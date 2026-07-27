@@ -7,13 +7,15 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 2.2. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // Apply seeds result := StatusSatisfied before the anchor loop, so a mapping with
 // zero anchors never enters the loop and is emitted satisfied. A crosswalk whose
 // "satisfied-by" is empty — or whose key was misspelled, so it decodes to nil —
 // therefore claims a second-framework citation is met with no evidence at all.
-func TestRepro22EmptyAnchorSetMustNotSatisfy(t *testing.T) {
+func TestEmptyAnchorSetMustNotSatisfy(t *testing.T) {
 	cases := []struct {
 		name string
 		cw   Crosswalk
@@ -48,7 +50,7 @@ func TestRepro22EmptyAnchorSetMustNotSatisfy(t *testing.T) {
 
 // An unknown anchor id (nothing in the evidence set answers it) must also be
 // not-satisfied rather than silently ignored.
-func TestRepro22UnknownAnchorMustNotSatisfy(t *testing.T) {
+func TestUnknownAnchorMustNotSatisfy(t *testing.T) {
 	records := []evidence.Record{}
 	cw := Crosswalk{Mappings: []Mapping{{Control: "DORA-9.1", SatisfiedBy: []string{"no-such-control"}}}}
 

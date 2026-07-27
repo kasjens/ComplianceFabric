@@ -8,8 +8,9 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 )
 
-// REPRODUCTION — Workstream R.2, plan items 3.3 and 3.4. Expected to FAIL
-// against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 func at(h, m int) time.Time { return time.Date(2026, 7, 1, h, m, 0, 0, time.UTC) }
 
@@ -19,7 +20,7 @@ func at(h, m int) time.Time { return time.Date(2026, 7, 1, h, m, 0, 0, time.UTC)
 // the LATEST record wins outright. A failing subject is therefore masked by any
 // passing subject observed after it: the control reads green, and NotSatisfied()
 // — the list a reviewer acts on — omits it entirely.
-func TestRepro33FailingSubjectMustNotBeMaskedByAnother(t *testing.T) {
+func TestFailingSubjectMustNotBeMaskedByAnother(t *testing.T) {
 	records := []evidence.Record{
 		{ControlID: "CM-2", Subject: "argo/payments", Result: oscal.StatusNotSatisfied, ObservedAt: at(10, 0)},
 		{ControlID: "CM-2", Subject: "argo/billing", Result: oscal.StatusSatisfied, ObservedAt: at(10, 5)},
@@ -54,7 +55,7 @@ func TestRepro33FailingSubjectMustNotBeMaskedByAnother(t *testing.T) {
 // IsZero(), so the escape hatch in Summarize never fires. A newer FAILING
 // observation carrying a missing timestamp sorts to 1970, loses the
 // latest-wins comparison, and the stale green is preserved.
-func TestRepro34EpochTimestampMustNotFreezeStaleGreen(t *testing.T) {
+func TestEpochTimestampMustNotFreezeStaleGreen(t *testing.T) {
 	records := []evidence.Record{
 		{ControlID: "PART11-3", Subject: "ns/prod/Pod/api", Result: oscal.StatusSatisfied, ObservedAt: at(9, 0)},
 		// Appended later, but its timestamp was missing and became epoch.

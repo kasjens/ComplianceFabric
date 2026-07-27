@@ -7,14 +7,16 @@ import (
 	"testing"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 5.1. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // Write joins the raw Check_Id into the output path. Check_Id is an unvalidated
 // prop value from GitOps-authored component-definition JSON, and filepath.Join
 // CLEANS "../" rather than rejecting it, so a crafted check id escapes the output
 // directory and writes an arbitrary file with mode 0644 — for example over
 // ~/.ssh/authorized_keys on a CI runner.
-func TestRepro51WriteMustRejectTraversingCheckID(t *testing.T) {
+func TestWriteMustRejectTraversingCheckID(t *testing.T) {
 	root := t.TempDir()
 	outDir := filepath.Join(root, "out")
 	// A sentinel the traversal would land in, one level above outDir.
@@ -45,7 +47,7 @@ func TestRepro51WriteMustRejectTraversingCheckID(t *testing.T) {
 }
 
 // Benign check ids must keep working — this guards the fix against overreach.
-func TestRepro51BenignCheckIDStillWrites(t *testing.T) {
+func TestBenignCheckIDStillWrites(t *testing.T) {
 	outDir := t.TempDir()
 	r := Result{Policies: []Policy{{CheckID: "require-signed-images", Body: []byte("ok: true\n")}}}
 

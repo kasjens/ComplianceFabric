@@ -8,14 +8,15 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/registry"
 )
 
-// REPRODUCTION — Workstream R.2, plan items 3.4 (producer half) and 3.5.
-// Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // 3.4 — the Kyverno timestamp is an OPTIONAL field. When it is absent,
 // res.Timestamp.Seconds is the zero value and time.Unix(0,0) yields 1970, which
 // is not IsZero(), so nothing downstream can tell an imputed timestamp from a
 // real one. The record silently claims to have been observed in 1970.
-func TestRepro34MissingPolicyReportTimestampMustNotBecomeEpoch(t *testing.T) {
+func TestMissingPolicyReportTimestampMustNotBecomeEpoch(t *testing.T) {
 	report := []byte(`{
 	  "scope": {"kind":"Pod","namespace":"prod","name":"api"},
 	  "results": [
@@ -49,7 +50,7 @@ func TestRepro34MissingPolicyReportTimestampMustNotBecomeEpoch(t *testing.T) {
 // evidence records with an identical subject, inflating auditor-facing counts
 // ~2x. Worse, a guardrail-blocked OUTPUT yields both a satisfied record (the
 // input passed) and a not-satisfied one for the same interaction.
-func TestRepro35OneInteractionMustYieldOneRecord(t *testing.T) {
+func TestOneInteractionMustYieldOneRecord(t *testing.T) {
 	reg := registry.Registry{Agents: []registry.Agent{{
 		ID:      "release-reviewer",
 		Prompts: []string{"summarise-findings"},

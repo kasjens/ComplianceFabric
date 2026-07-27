@@ -4,14 +4,16 @@ import (
 	"testing"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 5.2. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // ruleChecks builds map[Rule_Id]Check_Id by iterating the groupRule MAP. When two
 // rule-set groups declare the SAME Rule_Id with different Check_Ids, which one
 // wins depends on Go's randomised map iteration order. So `fabric generate`
 // composes a DIFFERENT policy set from byte-identical inputs — the compliance
 // artefact is not reproducible, which is the property an auditor relies on.
-func TestRepro52DuplicateRuleIDMustNotBeNondeterministic(t *testing.T) {
+func TestDuplicateRuleIDMustNotBeNondeterministic(t *testing.T) {
 	cd := ComponentDefinition{
 		Components: []Component{{
 			Title: "Kyverno",

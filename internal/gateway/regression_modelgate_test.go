@@ -8,7 +8,9 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/registry"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 1.7. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // pinnedRegistry qualifies an agent that may ONLY use "approved-model".
 func pinnedRegistry() registry.Registry {
@@ -41,7 +43,7 @@ func extract(t *testing.T, body string) Request {
 // LAST match. A body carrying both "model" and "Model" therefore shows the
 // gateway one value while a strict upstream parser reads the other, so the model
 // allow-list is decided on a different value than the one that will be served.
-func TestRepro17CaseVariantDuplicateKeyMustBeRejected(t *testing.T) {
+func TestCaseVariantDuplicateKeyMustBeRejected(t *testing.T) {
 	// The gateway sees "approved-model" (last match wins) and allows;
 	// a strict upstream taking the first "model" key serves "forbidden-model".
 	const body = `{"model":"forbidden-model","Model":"approved-model",
@@ -69,7 +71,7 @@ func TestRepro17CaseVariantDuplicateKeyMustBeRejected(t *testing.T) {
 // 1.7(a) — the model gate carves out req.Model == "". Azure OpenAI takes the
 // deployment from the URL PATH, so a request that omits the body "model" still
 // reaches a real model — while skipping the allow-list entirely.
-func TestRepro17MissingModelWithPinnedAgentMustDeny(t *testing.T) {
+func TestMissingModelWithPinnedAgentMustDeny(t *testing.T) {
 	req := extract(t, `{"messages":[{"role":"user","content":"go"}]}`)
 
 	if req.Model != "" {
@@ -83,7 +85,7 @@ func TestRepro17MissingModelWithPinnedAgentMustDeny(t *testing.T) {
 
 // 1.7 — legacy OpenAI "functions" are not extracted, so tool qualification is
 // skipped for callers using the older shape.
-func TestRepro17LegacyFunctionsMustBeExtracted(t *testing.T) {
+func TestLegacyFunctionsMustBeExtracted(t *testing.T) {
 	req := extract(t, `{"model":"approved-model","messages":[],
 	                    "functions":[{"name":"exfiltrate"}]}`)
 

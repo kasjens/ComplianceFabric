@@ -13,8 +13,9 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/registry"
 )
 
-// REPRODUCTION — Workstream R.2, plan items 1.1 and 1.5. Expected to FAIL
-// against cac9f78. Both drive the real Proxy against a real upstream.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // testRegistry qualifies the test agent for the prompt it sends, so the response
 // path is what these tests exercise rather than the admission gates.
@@ -84,7 +85,7 @@ func callProxy(t *testing.T, proxy *httptest.Server) []byte {
 // token-by-token emission is exactly how an LLM streams text. A secret split
 // across two events matches neither event, so every byte is released and the
 // agent reassembles the key. finish() then logs the stream as allowed.
-func TestRepro11SecretSplitAcrossSSEEventsMustNotReachAgent(t *testing.T) {
+func TestSecretSplitAcrossSSEEventsMustNotReachAgent(t *testing.T) {
 	cases := []struct {
 		name   string
 		chunks []string
@@ -139,7 +140,7 @@ func TestRepro11SecretSplitAcrossSSEEventsMustNotReachAgent(t *testing.T) {
 // 1.5 — the request is screened DECODED but the response is screened as raw JSON
 // bytes. A \u-escaped secret does not match the raw body, yet the agent's JSON
 // parser reconstructs it.
-func TestRepro15EscapedSecretInBufferedResponseMustNotReachAgent(t *testing.T) {
+func TestEscapedSecretInBufferedResponseMustNotReachAgent(t *testing.T) {
 	// The secret written entirely as JSON unicode escapes: it decodes back to the
 	// secret but shares no literal bytes with it.
 	escaped := jsonUnicodeEscape(secret)

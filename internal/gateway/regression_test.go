@@ -6,7 +6,9 @@ import (
 	"time"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 1.6. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // The cost is taken from a client-supplied X-Fabric-Cost header and passed to
 // Charge unvalidated. strconv.ParseFloat accepts "NaN", "Inf" and negatives.
@@ -18,7 +20,7 @@ import (
 //
 // Either way a caller controls its own budget, which is the thing the limiter
 // exists to prevent.
-func TestRepro16NonFiniteAndNegativeCostMustBeRejected(t *testing.T) {
+func TestNonFiniteAndNegativeCostMustBeRejected(t *testing.T) {
 	now := time.Date(2026, 7, 1, 10, 0, 0, 0, time.UTC)
 	const agent = "release-reviewer"
 

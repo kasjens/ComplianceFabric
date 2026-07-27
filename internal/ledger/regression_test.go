@@ -10,7 +10,9 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 4.3. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 func rec(subject string) evidence.Record {
 	return evidence.Record{
@@ -27,7 +29,7 @@ func rec(subject string) evidence.Record {
 // return an error, which renders the ENTIRE ledger unreadable, including every
 // prior valid entry. Verify() and any further Append() fail with it, so the
 // evidence store becomes permanently inaccessible rather than degrading.
-func TestRepro43OversizedRecordMustNotBreakLedger(t *testing.T) {
+func TestOversizedRecordMustNotBreakLedger(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "evidence.jsonl")
 	l := Open(path)
 

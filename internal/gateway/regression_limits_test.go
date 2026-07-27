@@ -10,8 +10,9 @@ import (
 	"time"
 )
 
-// REPRODUCTION — Workstream R.2, plan items 1.3, 1.4 and 1.8. Expected to FAIL
-// against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // 1.3 — X-Fabric-Agent is an unauthenticated client string. Registry
 // qualification, the model and tool allow-lists, AND the rate/cost budget are all
@@ -19,7 +20,7 @@ import (
 // agent's entire qualified surface simply by claiming its name. This test asserts
 // the trust boundary the ADR must establish; until then it documents that the
 // identity is asserted, never proven.
-func TestRepro13HeaderIdentityIsUnauthenticated(t *testing.T) {
+func TestHeaderIdentityIsUnauthenticated(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		io.WriteString(w, `{"ok":true}`)
 	}))
@@ -73,7 +74,7 @@ func TestRepro13HeaderIdentityIsUnauthenticated(t *testing.T) {
 // 1.8 — RequestFromHTTP does io.ReadAll on the request body with no
 // MaxBytesReader and no LimitReader, so a multi-GB body is read entirely into
 // memory before any gate runs. The read itself is the denial of service.
-func TestRepro18OversizedRequestBodyMustBeRejected(t *testing.T) {
+func TestOversizedRequestBodyMustBeRejected(t *testing.T) {
 	// 32 MB of valid JSON — small enough to keep the test fast, far past any
 	// sane request cap.
 	body := `{"model":"approved-model","messages":[{"role":"user","content":"` +
@@ -101,7 +102,7 @@ func TestRepro18OversizedRequestBodyMustBeRejected(t *testing.T) {
 // buffer as one event, which actually CATCHES a split secret that the working
 // "\n\n" path misses. Fixing 1.4 without also landing 1.1's overlap window would
 // therefore INTRODUCE the 1.1 leak on CRLF upstreams. Land them together.
-func TestRepro14CRLFStreamMustReleaseIncrementally(t *testing.T) {
+func TestCRLFStreamMustReleaseIncrementally(t *testing.T) {
 	pr, pw := io.Pipe()
 	t.Cleanup(func() { pw.Close() })
 

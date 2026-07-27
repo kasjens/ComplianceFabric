@@ -9,8 +9,9 @@ import (
 	"testing"
 )
 
-// REPRODUCTION — Workstream R.2, plan items 4.1 and 4.4. Expected to FAIL
-// against cac9f78. Run these under -race.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // 4.1 — Append re-reads the whole file to find the head, computes the chain hash,
 // then opens the file O_APPEND and writes. There is no file lock and no in-process
@@ -18,7 +19,7 @@ import (
 // carrying the same PrevHash. Verify() then fails forever, and the failure is
 // INDISTINGUISHABLE FROM TAMPERING — which is the one thing an evidence ledger
 // must never be ambiguous about. There is no repair path.
-func TestRepro41ConcurrentAppendsMustNotCorruptChain(t *testing.T) {
+func TestConcurrentAppendsMustNotCorruptChain(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "evidence.jsonl")
 	l := Open(path)
 
@@ -59,7 +60,7 @@ func TestRepro41ConcurrentAppendsMustNotCorruptChain(t *testing.T) {
 // at the tail: dropping the last line leaves a shorter but perfectly self-
 // consistent chain, and Verify returns nil. `head -n -1 ledger.jsonl` silently
 // destroys evidence.
-func TestRepro44TailTruncationMustBeDetected(t *testing.T) {
+func TestTailTruncationMustBeDetected(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "evidence.jsonl")
 	l := Open(path)
 

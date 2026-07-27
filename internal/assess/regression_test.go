@@ -8,7 +8,9 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/validate"
 )
 
-// REPRODUCTION — Workstream R.2, plan item 2.1. Expected to FAIL against cac9f78.
+// Regression tests. Each of these failed before the fix that accompanies it
+// and is paired with a control case that passed, so it pins the defect rather
+// than merely exercising the code.
 
 // bundleWithRuleButNoCheck builds a bundle whose single selected control maps to
 // a Rule_Id that is declared on the component but has NO Check_Id in its rule-set
@@ -51,7 +53,7 @@ func bundleWithRuleButNoCheck() validate.Bundle {
 }
 
 // The empty policy id must not be counted as coverage.
-func TestRepro21CoverageMustNotCountEmptyPolicyID(t *testing.T) {
+func TestCoverageMustNotCountEmptyPolicyID(t *testing.T) {
 	rows := report.Coverage(bundleWithRuleButNoCheck())
 	if len(rows) != 1 {
 		t.Fatalf("expected 1 coverage row, got %d", len(rows))
@@ -66,7 +68,7 @@ func TestRepro21CoverageMustNotCountEmptyPolicyID(t *testing.T) {
 
 // The user-visible consequence: `fabric assess --strict` calls this control
 // satisfied, so a control with no enforcement behind it passes the gate.
-func TestRepro21AssessMustNotSatisfyRuleWithNoCheck(t *testing.T) {
+func TestAssessMustNotSatisfyRuleWithNoCheck(t *testing.T) {
 	res := Assess(bundleWithRuleButNoCheck())
 	if len(res.Results) != 1 || len(res.Results[0].Findings) != 1 {
 		t.Fatalf("expected exactly 1 finding, got %+v", res.Results)
