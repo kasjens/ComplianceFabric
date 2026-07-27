@@ -4,6 +4,38 @@ This roadmap shows the order the project plans to build in. It is a direction, n
 
 The phases follow the six layers in [`docs/01-architecture.md`](docs/01-architecture.md), built from the foundation up so each phase produces something usable on its own.
 
+## Where the project is today
+
+**Current release: [`v0.1.0`](https://github.com/kasjens/ComplianceFabric/releases/tag/v0.1.0)** — the first tagged release, gated on its own SBOM and SLSA provenance evidence, with the artifacts and the evidence ledger signed keylessly and verified in the same job.
+
+| Phase | State | What is actually proven |
+|---|---|---|
+| 0 — Documentation and design | **Done** | 11 layer docs, 10 ADRs, full governance set |
+| 1 — Controls as code and enforcement | **Done** | Admission deny/admit and a PolicyReport, on a live kind cluster in CI |
+| 2 — Trusted delivery and change control | **Done** | Keyless signature verification at admission, SBOM + provenance evidence, release gate |
+| 3 — Evidence and reporting | **Done** | Hash-chained ledger, seven producers, posture rollup, live dashboard, continuous collector |
+| 4 — AI agent governance | **In progress** | Registry, gateway, live proxy, eval gates and tracing all ship and are proven end to end. **Open: a reference deployment.** |
+| 5 — Cross-sector profiles | **In progress** | DORA, NIS2 and ISO 42001 crosswalks ship and now run against a real ledger in CI. **Open: the remaining integration proofs.** |
+
+Every CLI subcommand runs as the real binary in CI, the unit suite runs with `-race` on Linux and Windows, and five end-to-end suites cover admission, the inline gateway, the live proxy, SBOM content and the release gate.
+
+## What's next
+
+In the order the project intends to take them:
+
+1. **A reference deployment for the gateway (closes Phase 4).** The enforcement logic is proven against a fake upstream in CI; what is missing is a worked, deployable example — manifests, a sidecar or mesh pattern, and the operational posture [ADR-0008](docs/adr/0008-gateway-trust-model.md) assumes. Until that exists, "route all agent traffic through the gateway" is an instruction without an implementation.
+2. **The remaining Phase 5 integration proofs.** `fabric crosswalk` now runs in CI against a real ledger, which was the specific gap that reopened the phase. It stays open until the rest is proven the same way.
+3. **External ledger anchoring** ([ADR-0010](docs/adr/0010-ledger-anchoring-and-its-limits.md), step 4). The checkpoint sidecar detects tail truncation, but the ledger cannot resist a writer with access to its host. Signed checkpoints, or publishing the head hash to a transparency log, is what would change that — and nothing will claim it before it lands.
+4. **Supply-chain residuals.** Actions, tool versions and scanned images are pinned; the syft *install script* is still fetched from its main branch, so what is installed is pinned but the installer is not.
+
+### A note on how this roadmap is written
+
+Phases are marked done only when an **integration proof** exists — a committed harness that runs the real binary in CI, not a unit test. Phase 5 was marked done once and flipped back when it turned out its headline command had never run outside `go test`. Dated review notes below record where earlier claims ran ahead of the evidence and how they were corrected; they are kept rather than edited away, because a roadmap that quietly rewrites its own history is worth less than one that shows its corrections.
+
+## Phase detail and review history
+
+Each phase below carries dated review notes recording what was verified, what was found overstated, and how it was corrected.
+
 > **Implementation review (2026-06-06).** Phases 0–4 were audited against the committed code, tests, and control data. Ground truth: `go test ./...`, `go vet`, and `gofmt -l` are all clean, the build is stdlib-only (no external dependencies), and `fabric validate`/`assess` pass on the shipped controls. The net-new engine (controls, five evidence producers, ledger, registry, eval gate) is fully implemented and test-covered. Two claims were corrected as overstated: the Sigstore admit path is **not** exercised in CI, and the SBOM/SLSA reference pipeline is **not started**. The Phase 1 kind-cluster admission proof, previously flagged as not reproducible, has since been closed: a committed e2e harness (`test/e2e/admission.sh`) now reproduces the deny/admit/PolicyReport proof and runs as a kind-based CI job. Each phase below carries a dated review note.
 
 ## Phase 0: Documentation and design (done)
