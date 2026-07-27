@@ -123,13 +123,24 @@ jobs:
       # binding to the thing it describes.
       - name: Sign the release artifacts and their evidence
         run: |
+          # Cosign v3 emits a Sigstore BUNDLE: one file carrying the signature,
+          # the Fulcio certificate and the Rekor inclusion proof together. The
+          # older --output-signature/--output-certificate pair is deprecated and
+          # silently ignored under the new bundle format.
           for f in fabric release/sbom.cyclonedx.json release/provenance.json release/release.ledger; do
-            cosign sign-blob --yes \
-              --output-signature "$f.sig" \
-              --output-certificate "$f.pem" \
-              "$f"
+            cosign sign-blob --yes --bundle "$f.sigstore.json" "$f"
           done
-          ls -la fabric.sig release/*.sig
+          ls -la fabric.sigstore.json release/*.sigstore.json
+
+      # Verify what we just signed, in the same job. An unverifiable signature is
+      # worse than none: it looks like assurance and is not.
+      - name: Verify the signatures
+        run: |
+          ident="${{ github.server_url }}/${{ github.repository }}/.github/workflows/release.yml@${{ github.ref }}"
+          issuer="https://token.actions.githubusercontent.com"
+          for f in fabric release/sbom.cyclonedx.json release/provenance.json release/release.ledger; do
+            cosign verify-blob "$f" --bundle "$f.sigstore.json" --certificate-identity "$ident" --certificate-oidc-issuer "$issuer"
+          done
 
       - name: Upload release evidence artifacts
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -139,10 +150,8 @@ jobs:
             release/sbom.cyclonedx.json
             release/provenance.json
             release/release.ledger
-            release/*.sig
-            release/*.pem
-            fabric.sig
-            fabric.pem
+            release/*.sigstore.json
+            fabric.sigstore.json
 
       - name: Attach release evidence to the GitHub release
         if: github.event_name == 'release'
@@ -151,7 +160,7 @@ jobs:
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
             release/sbom.cyclonedx.json release/provenance.json release/release.ledger \
-            release/sbom.cyclonedx.json.sig release/sbom.cyclonedx.json.pem \
-            release/provenance.json.sig release/provenance.json.pem \
-            release/release.ledger.sig release/release.ledger.pem \
+            release/sbom.cyclonedx.json.sigstore.json \
+            release/provenance.json.sigstore.json \
+            release/release.ledger.sigstore.json \
             --clobber

@@ -3,8 +3,7 @@ release/sbom.cyclonedx.json
 release/provenance.json
 release/*.ledger
 release/*.ledger.head
-release/*.sig
-release/*.pem
+release/*.sigstore.json
 
 cfp-copenhagen.md
 cfp-cnd2026.md
