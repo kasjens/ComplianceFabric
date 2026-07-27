@@ -84,8 +84,12 @@ type Record struct {
 	// an evidence record to the exact built artifact - and, since the digest is
 	// what a transparency log (Rekor) indexes, to that artifact's transparency-log
 	// entry. Records that do not concern a specific artifact leave it empty.
-	ArtifactRef string        `json:"artifact-ref,omitempty"`
-	Change      *ChangeRecord `json:"change,omitempty"`
+	ArtifactRef string `json:"artifact-ref,omitempty"`
+	// ObservedAtImputed marks a record whose source carried no usable timestamp,
+	// so ObservedAt is the collection time rather than the time of observation. An
+	// imputed time must never be presented to a reviewer as a measured one.
+	ObservedAtImputed bool          `json:"observed-at-imputed,omitempty"`
+	Change            *ChangeRecord `json:"change,omitempty"`
 }
 
 // AsEvidence turns a change-control record into an evidence-ledger entry for the

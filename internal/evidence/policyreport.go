@@ -48,6 +48,10 @@ func FromPolicyReport(reportJSON []byte, policyControls map[string][]string) ([]
 		return nil, err
 	}
 
+	// Stands in for the observation time of any result whose own timestamp is
+	// absent. Read once so every imputed record in a report shares one value.
+	collectedAt := time.Now().UTC()
+
 	// Pair each result with the scope of its enclosing report. Kyverno's
 	// background reports carry the audited resource at the report level (scope)
 	// rather than per result.
@@ -93,14 +97,26 @@ func FromPolicyReport(reportJSON []byte, policyControls map[string][]string) ([]
 				subject = fmt.Sprintf("%s/%s", subj.Kind, subj.Name)
 			}
 		}
+		// The Kyverno timestamp is optional. An absent one decodes to zero
+		// seconds, and time.Unix(0,0) is 1970 — a value that is not IsZero(), so
+		// nothing downstream could tell an imputed time from a real one. It sorted
+		// to the front of every trend and lost every latest-wins comparison,
+		// freezing a stale green. Substitute collection time and mark the record,
+		// so the imputation is visible rather than asserted as fact.
 		observedAt := time.Unix(res.Timestamp.Seconds, 0).UTC()
+		imputed := false
+		if res.Timestamp.Seconds <= 0 {
+			observedAt = collectedAt
+			imputed = true
+		}
 		for _, controlID := range controls {
 			records = append(records, Record{
-				ControlID:  controlID,
-				Subject:    subject,
-				Result:     status,
-				ObservedAt: observedAt,
-				Source:     "kyverno/" + res.Policy,
+				ControlID:         controlID,
+				Subject:           subject,
+				Result:            status,
+				ObservedAt:        observedAt,
+				ObservedAtImputed: imputed,
+				Source:            "kyverno/" + res.Policy,
 			})
 		}
 	}

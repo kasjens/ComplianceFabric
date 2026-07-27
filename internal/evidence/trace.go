@@ -17,10 +17,20 @@ import (
 // no verdict) is distinguishable from a recorded false (an interaction the gateway
 // blocked).
 type traceRec struct {
-	ID        string    `json:"id"`
-	Agent     string    `json:"agent"`
-	Prompt    string    `json:"prompt"`
-	Tools     []string  `json:"tools"`
+	ID     string   `json:"id"`
+	Agent  string   `json:"agent"`
+	Prompt string   `json:"prompt"`
+	Tools  []string `json:"tools"`
+	// Model is the model the interaction actually used. Without reading it, a
+	// post-hoc re-derivation cannot detect an off-model interaction the gateway
+	// itself gated on.
+	Model string `json:"model"`
+	// Phase distinguishes the request ("input") from the response ("output"). The
+	// gateway writes one line per phase sharing a single id, so ignoring this
+	// field turned every interaction into two evidence records with an identical
+	// subject — doubling auditor-facing counts and, when an output was blocked,
+	// emitting a satisfied and a not-satisfied record for the same interaction.
+	Phase     string    `json:"phase"`
 	Timestamp time.Time `json:"timestamp"`
 	Allowed   *bool     `json:"allowed"`
 }
@@ -40,7 +50,17 @@ func FromAgentTraces(tracesJSON []byte, reg registry.Registry, controlID string)
 		return nil, err
 	}
 
-	var records []Record
+	// Collapse the phases of one interaction into a single record. The gateway
+	// logs input and output separately, but they are one interaction and must
+	// count once; the worst verdict across the phases wins, so a blocked response
+	// is never masked by the request that passed.
+	type agg struct {
+		rec   Record
+		index int
+	}
+	byInteraction := map[string]*agg{}
+	var order []string
+
 	for _, tr := range traces {
 		// The gateway's inline admission decision and this post-hoc evidence
 		// judgment are the same question, so they share one definition of
@@ -59,6 +79,7 @@ func FromAgentTraces(tracesJSON []byte, reg registry.Registry, controlID string)
 			decision := gateway.Decide(reg, gateway.Request{
 				ID:     tr.ID,
 				Agent:  tr.Agent,
+				Model:  tr.Model,
 				Prompt: tr.Prompt,
 				Tools:  tr.Tools,
 			})
@@ -66,13 +87,37 @@ func FromAgentTraces(tracesJSON []byte, reg registry.Registry, controlID string)
 				result = oscal.StatusNotSatisfied
 			}
 		}
-		records = append(records, Record{
+
+		// Interactions are keyed by id where the log provides one. A log with no
+		// ids cannot have its phases correlated, so each line stands alone.
+		key := tr.ID
+		if key == "" {
+			key = "agent/" + tr.Agent + "/trace/" + strconv.Itoa(len(order))
+		}
+
+		if existing, ok := byInteraction[key]; ok {
+			if result != oscal.StatusSatisfied {
+				existing.rec.Result = result
+			}
+			if tr.Timestamp.After(existing.rec.ObservedAt) {
+				existing.rec.ObservedAt = tr.Timestamp.UTC()
+			}
+			continue
+		}
+
+		byInteraction[key] = &agg{rec: Record{
 			ControlID:  controlID,
 			Subject:    "agent/" + tr.Agent + "/trace/" + tr.ID,
 			Result:     result,
 			ObservedAt: tr.Timestamp.UTC(),
 			Source:     "gateway/" + tr.Agent,
-		})
+		}}
+		order = append(order, key)
+	}
+
+	records := make([]Record, 0, len(order))
+	for _, key := range order {
+		records = append(records, byInteraction[key].rec)
 	}
 	return records, nil
 }
