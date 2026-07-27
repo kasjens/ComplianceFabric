@@ -43,6 +43,20 @@ git commit -s -m "Add Annex 11 audit-trail control mapping"
 
 The sign-off line states that you wrote the change or have the right to submit it under the project license.
 
+## Branch and tag protection
+
+`main` is protected. A change reaches it through a pull request that:
+
+- has an approving review from a code owner (see [`.github/CODEOWNERS`](.github/CODEOWNERS)), with stale approvals dismissed when new commits land;
+- has every required CI check green, with the branch up to date with `main`;
+- has all review conversations resolved.
+
+History on `main` is linear — merge commits are disabled, so use squash or rebase — and the branch cannot be force-pushed or deleted.
+
+**`keyless-e2e` is deliberately not a required check.** It cannot run on a pull request from a fork (see above), and a required check that never runs would block such a PR forever. A maintainer runs it on the branch instead before merging anything that touches image-signature policy or the admission path.
+
+Release tags (`v*`) cannot be deleted or moved once pushed. A release's evidence — its SBOM, provenance and signed evidence ledger — is bound to the tag it was built from, so moving a tag would silently invalidate every artifact that references it.
+
 ## Review and merge
 
 A maintainer reviews each pull request. Changes to control mappings get extra scrutiny, since a wrong mapping produces wrong evidence. A pull request merges once it has a maintainer approval and passes checks. The merge record is part of the project's own change history.
