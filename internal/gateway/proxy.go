@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,6 +28,10 @@ const (
 	HeaderAgent  = "X-Fabric-Agent"
 	HeaderPrompt = "X-Fabric-Prompt"
 	HeaderCost   = "X-Fabric-Cost"
+	// HeaderToken carries the agent's shared secret when the proxy is configured
+	// with AgentTokens. It is what turns the agent header from a claim into a
+	// credential.
+	HeaderToken = "X-Fabric-Token"
 )
 
 // RequestFromHTTP recovers a gateway Request from a live upstream LLM/MCP request:
@@ -42,7 +47,9 @@ func RequestFromHTTP(r *http.Request) (Request, error) {
 	if agent == "" {
 		return Request{}, fmt.Errorf("missing %s header", HeaderAgent)
 	}
-	req := Request{Agent: agent, Prompt: r.Header.Get(HeaderPrompt)}
+	// This is the live wire: an undeclared model can still resolve upstream, so
+	// a pinned agent must state one.
+	req := Request{Agent: agent, Prompt: r.Header.Get(HeaderPrompt), RequireDeclaredModel: true}
 
 	if c := r.Header.Get(HeaderCost); c != "" {
 		cost, err := strconv.ParseFloat(c, 64)
@@ -59,15 +66,26 @@ func RequestFromHTTP(r *http.Request) (Request, error) {
 		req.Cost = cost
 	}
 
-	body, err := io.ReadAll(r.Body)
+	// Bound the read: without a limit a multi-gigabyte body is pulled entirely
+	// into memory before any gate runs.
+	body, err := io.ReadAll(io.LimitReader(r.Body, MaxRequestBytes+1))
 	if err != nil {
 		return Request{}, err
+	}
+	if len(body) > MaxRequestBytes {
+		return Request{}, fmt.Errorf("request body exceeds the %d byte limit", MaxRequestBytes)
 	}
 	// Leave the consumed body readable for the reverse proxy to forward verbatim.
 	r.Body = io.NopCloser(bytes.NewReader(body))
 
 	if len(bytes.TrimSpace(body)) == 0 {
 		return req, nil
+	}
+
+	// A body whose keys collide case-insensitively would be read differently by
+	// this proxy and by the upstream, so no gate on it can be trusted.
+	if err := rejectAmbiguousKeys(body); err != nil {
+		return Request{}, err
 	}
 
 	var payload struct {
@@ -81,6 +99,11 @@ func RequestFromHTTP(r *http.Request) (Request, error) {
 				Name string `json:"name"`
 			} `json:"function"`
 		} `json:"tools"`
+		// Legacy OpenAI function-calling shape. Without it a caller using the
+		// older field skips tool qualification entirely.
+		Functions []struct {
+			Name string `json:"name"`
+		} `json:"functions"`
 	}
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return Request{}, fmt.Errorf("malformed request body: %w", err)
@@ -95,41 +118,19 @@ func RequestFromHTTP(r *http.Request) (Request, error) {
 			req.Tools = append(req.Tools, name)
 		}
 	}
-	var inputs []string
-	for _, m := range payload.Messages {
-		if s := messageText(m.Content); s != "" {
-			inputs = append(inputs, s)
+	for _, f := range payload.Functions {
+		if f.Name != "" {
+			req.Tools = append(req.Tools, f.Name)
 		}
 	}
-	req.Input = strings.Join(inputs, "\n")
-	return req, nil
-}
 
-// messageText flattens a chat message's content to plain text for screening. The
-// content is either a plain string (OpenAI) or an array of typed blocks with a
-// text field (Anthropic); both are reduced to their text so the guardrail screens
-// what the agent actually sends regardless of API shape.
-func messageText(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-	var blocks []struct {
-		Text string `json:"text"`
-	}
-	if err := json.Unmarshal(raw, &blocks); err == nil {
-		var parts []string
-		for _, b := range blocks {
-			if b.Text != "" {
-				parts = append(parts, b.Text)
-			}
-		}
-		return strings.Join(parts, "\n")
-	}
-	return ""
+	// Screen the WHOLE decoded body, not a structured extract of it. Reducing the
+	// request to the message fields this struct happens to model meant anything
+	// carried elsewhere — a tool result, a tool's arguments, a top-level system
+	// prompt, a newer API's input field, a block type that did not exist when
+	// this was written — was screened as the empty string and allowed.
+	req.Input = screenable(body)
+	return req, nil
 }
 
 // Proxy is the live-traffic enforcement point: a reverse proxy in front of an
@@ -152,6 +153,17 @@ type Proxy struct {
 	// RequestFromHTTP when nil. It is a field so a deployment whose wire format
 	// differs can supply its own mapping without changing the enforcement.
 	Extract func(*http.Request) (Request, error)
+	// AgentTokens maps an agent id to the shared secret that proves a caller is
+	// that agent. When it is non-nil every request must present a matching
+	// X-Fabric-Token, so an agent's qualified surface and budget can no longer be
+	// claimed by anyone who can reach the listener.
+	//
+	// When it is nil the agent header is an UNAUTHENTICATED assertion and the
+	// proxy is only as safe as its network. That is a deployment decision, not an
+	// oversight — see ADR-0008 — but it means the listener must be reachable only
+	// by trusted callers (loopback, or behind an mTLS sidecar that terminates
+	// client certificates).
+	AgentTokens map[string]string
 	// Log receives one JSON object per handled interaction (JSON Lines); nil
 	// disables logging.
 	Log io.Writer
@@ -176,6 +188,23 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	req, err := extract(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Authenticate the asserted identity before any gate keyed on it runs. Every
+	// downstream decision — registry qualification, the model and tool
+	// allow-lists, the rate and cost budget — trusts req.Agent, so if the claim
+	// is unproven all of them are.
+	if !p.authenticate(req.Agent, r.Header.Get(HeaderToken)) {
+		decision := Decision{Allowed: false, Reason: "agent " + req.Agent + " failed authentication"}
+		writeLogLine(p.Log, &p.mu, clock(p.Now), logEntry{
+			ID: req.ID, Agent: req.Agent, Prompt: req.Prompt, Phase: "input",
+			Allowed: false, Reason: decision.Reason,
+		})
+		payload, _ := json.Marshal(decision)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write(payload)
 		return
 	}
 
@@ -243,27 +272,30 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 			// A non-streamed response is buffered and screened whole, so a dirty
 			// body can be replaced with a 403 before any of it reaches the agent.
-			body, err := io.ReadAll(resp.Body)
+			body, err := io.ReadAll(io.LimitReader(resp.Body, MaxResponseBytes+1))
 			if err != nil {
 				return err
 			}
 			_ = resp.Body.Close()
 
-			decision := p.Guardrail.Screen(string(body))
+			// An oversized response is blocked rather than buffered: failing
+			// closed is the point of screening the response at all.
+			if len(body) > MaxResponseBytes {
+				decision := Decision{Allowed: false, Reason: fmt.Sprintf(
+					"upstream response exceeds the %d byte screening limit", MaxResponseBytes)}
+				logOutput(decision)
+				blockResponse(resp, decision)
+				return nil
+			}
+
+			// Screened DECODED: the request was screened as decoded text while the
+			// response was screened as raw JSON, so a \u-escaped secret matched
+			// nothing here yet was reconstructed by the agent's own parser.
+			decision := p.Guardrail.Screen(screenable(body))
 			logOutput(decision)
 
 			if !decision.Allowed {
-				// Replace the secret-bearing response with the Decision and a
-				// fresh header set, so neither the blocked content nor any
-				// upstream header reaches the agent.
-				payload, _ := json.Marshal(decision)
-				resp.StatusCode = http.StatusForbidden
-				resp.Status = http.StatusText(http.StatusForbidden)
-				resp.Body = io.NopCloser(bytes.NewReader(payload))
-				resp.ContentLength = int64(len(payload))
-				resp.Header = http.Header{}
-				resp.Header.Set("Content-Type", "application/json")
-				resp.Header.Set("Content-Length", strconv.Itoa(len(payload)))
+				blockResponse(resp, decision)
 				return nil
 			}
 
@@ -274,6 +306,36 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rp.ServeHTTP(w, r)
+}
+
+// authenticate reports whether the caller may act as the named agent. With no
+// AgentTokens configured every caller passes, which is the documented
+// trusted-network posture; with tokens configured the agent must be known and
+// present its secret. The comparison is constant-time so a token cannot be
+// recovered by timing.
+func (p *Proxy) authenticate(agent, token string) bool {
+	if p.AgentTokens == nil {
+		return true
+	}
+	want, ok := p.AgentTokens[agent]
+	if !ok {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(want), []byte(token)) == 1
+}
+
+// blockResponse replaces a response with the Decision that blocked it, under a
+// fresh header set, so neither the withheld content nor any upstream header
+// reaches the agent.
+func blockResponse(resp *http.Response, decision Decision) {
+	payload, _ := json.Marshal(decision)
+	resp.StatusCode = http.StatusForbidden
+	resp.Status = http.StatusText(http.StatusForbidden)
+	resp.Body = io.NopCloser(bytes.NewReader(payload))
+	resp.ContentLength = int64(len(payload))
+	resp.Header = http.Header{}
+	resp.Header.Set("Content-Type", "application/json")
+	resp.Header.Set("Content-Length", strconv.Itoa(len(payload)))
 }
 
 // isEventStream reports whether the response is a Server-Sent Events stream, the
@@ -301,6 +363,13 @@ type screeningReader struct {
 	done    bool   // no more bytes will be released (clean EOF or a block)
 	blocked bool   // a rule fired; the stream is cut
 	logged  bool   // the single output verdict has been recorded
+
+	// textTail is the decoded tail of recently released events, re-screened
+	// alongside the next event so a pattern split across an event boundary is
+	// still caught. Token-by-token streaming is exactly how a model emits text,
+	// so without it "AKIA" and "IOSFODNN7EXAMPLE" pass as two clean events and
+	// the agent reassembles the key.
+	textTail []byte
 }
 
 func (s *screeningReader) Read(p []byte) (int, error) {
@@ -332,16 +401,27 @@ func (s *screeningReader) Read(p []byte) (int, error) {
 // events to ready and stopping at the first dirty one. When final is set the
 // trailing bytes (an event with no terminating blank line) are screened too.
 func (s *screeningReader) drain(final bool) {
-	const sep = "\n\n"
 	for !s.done {
-		idx := bytes.Index(s.pending, []byte(sep))
-		if idx < 0 {
+		end, ok := findEventEnd(s.pending)
+		if !ok {
 			break
 		}
-		event := s.pending[:idx+len(sep)]
-		s.pending = s.pending[idx+len(sep):]
+		event := s.pending[:end]
+		s.pending = s.pending[end:]
 		s.screen(event)
 	}
+
+	// An upstream that never emits a boundary must not be able to grow this
+	// buffer without limit.
+	if !s.done && !final && len(s.pending) > maxPendingBytes {
+		s.blocked = true
+		s.done = true
+		s.pending = nil
+		s.log(Decision{Allowed: false, Reason: fmt.Sprintf(
+			"upstream stream exceeded the %d byte event buffer without an event boundary", maxPendingBytes)})
+		return
+	}
+
 	if final && !s.done && len(s.pending) > 0 {
 		s.screen(s.pending)
 		s.pending = nil
@@ -350,14 +430,33 @@ func (s *screeningReader) drain(final bool) {
 
 // screen releases a clean event to the agent, or blocks the stream on the first
 // event a rule catches.
+//
+// The event is screened as DECODED text joined to the tail of what was already
+// released, so a pattern spanning two events is caught even though neither event
+// matches alone. The raw event is screened too, for streams that are not JSON.
+//
+// Residual, by nature: bytes already handed to the agent cannot be recalled. The
+// overlap check stops the REST of the stream, so the full pattern is never
+// completed, but streaming enforcement is best-effort in a way buffered
+// screening is not.
 func (s *screeningReader) screen(event []byte) {
+	probe := string(s.textTail) + eventText(event)
+
+	if d := s.guard.Screen(probe); !d.Allowed {
+		s.blocked = true
+		s.done = true
+		s.log(d)
+		return
+	}
 	if d := s.guard.Screen(string(event)); !d.Allowed {
 		s.blocked = true
 		s.done = true
 		s.log(d)
 		return
 	}
+
 	s.ready = append(s.ready, event...)
+	s.textTail = tailBytes([]byte(probe), overlapBytes)
 }
 
 // finish records a clean stream's allowed verdict once it reaches EOF without a

@@ -3,6 +3,8 @@ package gateway
 import (
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -18,23 +20,53 @@ import (
 // the trust boundary the ADR must establish; until then it documents that the
 // identity is asserted, never proven.
 func TestRepro13HeaderIdentityIsUnauthenticated(t *testing.T) {
-	r, err := http.NewRequest(http.MethodPost, "http://upstream/v1/messages",
-		strings.NewReader(`{"model":"approved-model","messages":[]}`))
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, `{"ok":true}`)
+	}))
+	defer upstream.Close()
+	u, err := url.Parse(upstream.URL)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// No credential of any kind — just the claim.
-	r.Header.Set(HeaderAgent, "release-reviewer")
-	r.Header.Set(HeaderPrompt, "summarise-findings")
 
-	req, err := RequestFromHTTP(r)
-	if err != nil {
-		return // rejecting an unauthenticated identity is the desired end state
+	p := &Proxy{
+		Registry:    testRegistry(),
+		Limiter:     NewLimiter(map[string]Limits{}),
+		Upstream:    u,
+		AgentTokens: map[string]string{"release-reviewer": "s3cret"},
+	}
+	ps := httptest.NewServer(p)
+	defer ps.Close()
+
+	call := func(token string) int {
+		r, err := http.NewRequest(http.MethodPost, ps.URL+"/v1/messages",
+			strings.NewReader(`{"model":"approved-model","messages":[]}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Header.Set(HeaderAgent, "release-reviewer")
+		r.Header.Set(HeaderPrompt, "summarise-findings")
+		if token != "" {
+			r.Header.Set(HeaderToken, token)
+		}
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		io.Copy(io.Discard, resp.Body)
+		return resp.StatusCode
 	}
 
-	if d := Decide(pinnedRegistry(), req); d.Allowed {
-		t.Errorf("an unauthenticated caller asserting %q inherited that agent's full "+
-			"qualified surface and budget with no proof of identity", req.Agent)
+	if code := call(""); code != http.StatusUnauthorized {
+		t.Errorf("a caller asserting release-reviewer with NO credential got %d; "+
+			"it inherited that agent's qualified surface and budget on an unproven claim", code)
+	}
+	if code := call("wrong"); code != http.StatusUnauthorized {
+		t.Errorf("a caller presenting the wrong token got %d, want 401", code)
+	}
+	if code := call("s3cret"); code == http.StatusUnauthorized {
+		t.Error("the legitimate agent was rejected with its correct token")
 	}
 }
 

@@ -27,6 +27,13 @@ type Request struct {
 	// no cost; a request that declares no cost still counts toward a request-rate
 	// budget.
 	Cost float64 `json:"cost,omitempty"`
+	// RequireDeclaredModel demands that a model-pinned agent state its model, and
+	// is set on the live proxy path where an undeclared model can still resolve
+	// upstream (Azure OpenAI takes the deployment from the URL path). It stays
+	// false for post-hoc re-derivation from a trace, where a historical
+	// interaction may simply not have recorded one and denying it would
+	// manufacture a lapse that never happened.
+	RequireDeclaredModel bool `json:"-"`
 }
 
 // Decision is the gateway's verdict on a request. When Allowed is false, Reason
@@ -66,6 +73,14 @@ func Decide(reg registry.Registry, req Request) Decision {
 	}
 	if agent.Model != "" && req.Model != "" && req.Model != agent.Model {
 		return Decision{Allowed: false, Reason: "agent " + req.Agent + " is not qualified for model " + req.Model}
+	}
+	// An agent pinned to a model must DECLARE one. The old carve-out for an
+	// undeclared model assumed the model always travels in the body, but Azure
+	// OpenAI carries the deployment in the URL path — so omitting the body field
+	// skipped the allow-list while the request still reached a real model.
+	if agent.Model != "" && req.Model == "" && req.RequireDeclaredModel {
+		return Decision{Allowed: false, Reason: "agent " + req.Agent +
+			" is pinned to model " + agent.Model + " but its request declares no model"}
 	}
 	for _, used := range req.Tools {
 		if !contains(agent.Tools, used) {
