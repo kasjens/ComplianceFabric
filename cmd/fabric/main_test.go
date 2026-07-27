@@ -12,6 +12,32 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/evidence"
 )
 
+// jsonPath renders a filesystem path for embedding in a JSON fixture. On Windows
+// a path like C:\Users\... makes "\U" an invalid JSON escape, so the fixture fails
+// to parse and the test fails for a reason that has nothing to do with what it is
+// testing. Go accepts forward slashes on every platform.
+func jsonPath(p string) string { return filepath.ToSlash(p) }
+
+// catCommand returns a command that writes the file at path to stdout, which is
+// how a collect source fetches its input. Windows has no cat, so the shell
+// builtin stands in for it there.
+func catCommand(path string) []string {
+	if runtime.GOOS == "windows" {
+		return []string{"cmd", "/c", "type", filepath.FromSlash(path)}
+	}
+	return []string{"cat", path}
+}
+
+// commandJSON renders a command array as a JSON array literal for a fixture.
+func commandJSON(t *testing.T, argv []string) string {
+	t.Helper()
+	b, err := json.Marshal(argv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func writeFixture(t *testing.T, path, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -696,7 +722,7 @@ func TestReleaseGateClearsCleanRelease(t *testing.T) {
 	writeFixture(t, policy, `{"banned":[{"name":"log4j","version":"2.14.1"}]}`)
 	manifest := filepath.Join(dir, "release.json")
 	writeFixture(t, manifest, `{"release":"mes-1.4.2","sources":[
-	  {"type":"sbom","file":"`+sbom+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+policy+`"}
+	  {"type":"sbom","file":"`+jsonPath(sbom)+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+jsonPath(policy)+`"}
 	]}`)
 	led := filepath.Join(dir, "release.ledger")
 
@@ -726,7 +752,7 @@ func TestReleaseGateBlocksOnBannedComponent(t *testing.T) {
 	writeFixture(t, policy, `{"banned":[{"name":"openssl","version":"3.0.8"}]}`)
 	manifest := filepath.Join(dir, "release.json")
 	writeFixture(t, manifest, `{"sources":[
-	  {"type":"sbom","file":"`+sbom+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+policy+`"}
+	  {"type":"sbom","file":"`+jsonPath(sbom)+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+jsonPath(policy)+`"}
 	]}`)
 	led := filepath.Join(dir, "release.ledger")
 
@@ -886,7 +912,7 @@ func TestCollectOnceAppendsChangesAndVerifies(t *testing.T) {
 	apps := driftAppsFixture(t, dir, "Synced")
 	cfgPath := filepath.Join(dir, "collect.json")
 	writeFixture(t, cfgPath, `{"interval":"30s","sources":[
-	  {"type":"drift","command":["cat","`+apps+`"],"control":"annex11-11-periodic-evaluation"}
+	  {"type":"drift","command":`+commandJSON(t, catCommand(apps))+`,"control":"annex11-11-periodic-evaluation"}
 	]}`)
 	led := filepath.Join(dir, "ledger.jsonl")
 
@@ -913,7 +939,7 @@ func TestCollectOnceIsIdempotent(t *testing.T) {
 	apps := driftAppsFixture(t, dir, "Synced")
 	cfgPath := filepath.Join(dir, "collect.json")
 	writeFixture(t, cfgPath, `{"interval":"30s","sources":[
-	  {"type":"drift","command":["cat","`+apps+`"],"control":"c1"}
+	  {"type":"drift","command":`+commandJSON(t, catCommand(apps))+`,"control":"c1"}
 	]}`)
 	led := filepath.Join(dir, "ledger.jsonl")
 

@@ -7,6 +7,12 @@ import (
 	"time"
 )
 
+// jsonPath renders a filesystem path for embedding in a JSON fixture. On Windows
+// a path like C:\Users\... makes "\U" an invalid JSON escape, so the fixture fails
+// to parse and the test fails for a reason that has nothing to do with what it is
+// testing. Go accepts forward slashes on every platform.
+func jsonPath(p string) string { return filepath.ToSlash(p) }
+
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
@@ -25,7 +31,7 @@ func TestLoadConfigResolvesSources(t *testing.T) {
 		"interval": "30s",
 		"sources": [
 			{"type":"drift","command":["kubectl","get","applications","-o","json"],"control":"annex11-11-periodic-evaluation"},
-			{"type":"sbom","command":["syft","img","-o","cyclonedx-json"],"control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+sbomPolicy+`"}
+			{"type":"sbom","command":["syft","img","-o","cyclonedx-json"],"control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+jsonPath(sbomPolicy)+`"}
 		]
 	}`)
 

@@ -9,6 +9,12 @@ import (
 	"github.com/kasjens/ComplianceFabric/internal/oscal"
 )
 
+// jsonPath renders a filesystem path for embedding in a JSON fixture. On Windows
+// a path like C:\Users\... makes "\U" an invalid JSON escape, so the fixture fails
+// to parse and the test fails for a reason that has nothing to do with what it is
+// testing. Go accepts forward slashes on every platform.
+func jsonPath(p string) string { return filepath.ToSlash(p) }
+
 func writeFile(t *testing.T, dir, name, content string) string {
 	t.Helper()
 	p := filepath.Join(dir, name)
@@ -41,7 +47,7 @@ func TestManifestEvidenceRunsProducers(t *testing.T) {
 	manifest := writeFile(t, dir, "release.json", `{
 		"release": "mes-1.4.2",
 		"sources": [
-			{"type":"sbom","file":"`+sbom+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+policy+`"}
+			{"type":"sbom","file":"`+jsonPath(sbom)+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+jsonPath(policy)+`"}
 		]
 	}`)
 
@@ -72,7 +78,7 @@ func TestBlockingSurfacesNotSatisfied(t *testing.T) {
 	policy := writeFile(t, dir, "policy.json", `{"banned":[{"name":"openssl","version":"3.0.8"}]}`)
 	manifest := writeFile(t, dir, "release.json", `{
 		"sources": [
-			{"type":"sbom","file":"`+sbom+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+policy+`"}
+			{"type":"sbom","file":"`+jsonPath(sbom)+`","control":"cfr-part-11-10a-system-validation","sbom-policy-file":"`+jsonPath(policy)+`"}
 		]
 	}`)
 
