@@ -6,6 +6,12 @@
       "file": "release/sbom.cyclonedx.json",
       "control": "cfr-part-11-10a-system-validation",
       "sbom-policy-file": "release/sbom-policy.json"
+    },
+    {
+      "type": "provenance",
+      "file": "release/provenance.json",
+      "control": "cfr-part-11-10a-system-validation",
+      "expected-builder": "https://github.com/kasjens/ComplianceFabric/.github/workflows/release.yml"
     }
   ]
 }
