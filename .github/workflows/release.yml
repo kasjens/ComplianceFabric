@@ -24,20 +24,24 @@ jobs:
   release-evidence:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
       - name: Build fabric (stdlib-only)
         run: go build -o fabric ./cmd/fabric
 
+      # Pinned to a specific syft release rather than whatever "latest" resolves
+      # to on the day; the installer verifies the release checksums itself.
+      # Residual: the install script is still fetched from the repo's main
+      # branch, so this pins WHAT is installed but not the installer that does it.
       - name: Install syft
         run: |
           curl -fsSL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b "$HOME/.local/bin"
+            | sh -s -- -b "$HOME/.local/bin" v1.49.0
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Generate the release SBOM
@@ -50,7 +54,7 @@ jobs:
         run: ./fabric ledger verify release/release.ledger
 
       - name: Upload release evidence artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: release-evidence
           path: |

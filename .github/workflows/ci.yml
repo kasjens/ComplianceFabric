@@ -13,10 +13,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
@@ -55,10 +55,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
@@ -74,10 +74,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
@@ -89,10 +89,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
@@ -104,17 +104,21 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
+      # Pinned to a specific syft release rather than whatever "latest" resolves
+      # to on the day; the installer verifies the release checksums itself.
+      # Residual: the install script is still fetched from the repo's main
+      # branch, so this pins WHAT is installed but not the installer that does it.
       - name: Install syft
         run: |
           curl -fsSL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b "$HOME/.local/bin"
+            | sh -s -- -b "$HOME/.local/bin" v1.49.0
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Prove SBOM-content evidence from a real syft scan
@@ -125,17 +129,21 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
+      # Pinned to a specific syft release rather than whatever "latest" resolves
+      # to on the day; the installer verifies the release checksums itself.
+      # Residual: the install script is still fetched from the repo's main
+      # branch, so this pins WHAT is installed but not the installer that does it.
       - name: Install syft
         run: |
           curl -fsSL https://raw.githubusercontent.com/anchore/syft/main/install.sh \
-            | sh -s -- -b "$HOME/.local/bin"
+            | sh -s -- -b "$HOME/.local/bin" v1.49.0
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Prove the release evidence gate end-to-end
@@ -146,10 +154,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 
@@ -162,7 +170,7 @@ jobs:
       - name: Install kubectl
         run: |
           curl -fsSLo kubectl \
-            "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            "https://dl.k8s.io/release/v1.30.4/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
 
@@ -182,7 +190,7 @@ jobs:
       # token and produce the keyless signature the production policy trusts.
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Install kind
         run: |
@@ -193,7 +201,7 @@ jobs:
       - name: Install kubectl
         run: |
           curl -fsSLo kubectl \
-            "https://dl.k8s.io/release/$(curl -fsSL https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+            "https://dl.k8s.io/release/v1.30.4/bin/linux/amd64/kubectl"
           chmod +x kubectl
           sudo mv kubectl /usr/local/bin/kubectl
 
@@ -205,10 +213,10 @@ jobs:
   test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.24'
 

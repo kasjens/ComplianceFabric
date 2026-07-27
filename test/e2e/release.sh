@@ -30,7 +30,7 @@
 
 set -euo pipefail
 
-IMAGE="${IMAGE:-alpine:latest}"
+IMAGE="${IMAGE:-alpine:3.20@sha256:d9e853e87e55526f6b2917df91a2115c36dd7c696a35be12163d44e6e2a4b6bc}"
 BANNED="${BANNED:-musl}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
