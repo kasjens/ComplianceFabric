@@ -32,8 +32,11 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # -race is what makes the ledger's concurrency guarantees actually tested:
+      # its appends serialize against each other, and a regression there corrupts
+      # the hash chain in a way indistinguishable from tampering.
       - name: Test
-        run: go test ./...
+        run: go test -race ./...
 
       - name: Validate controls
         run: go run ./cmd/fabric validate controls
@@ -177,3 +180,18 @@ jobs:
 
       - name: Prove keyless signature admit/deny against the production policy
         run: bash test/e2e/keyless-ci.sh
+
+  # The suite is now platform-portable, so it is proven so on every push rather
+  # than left to drift back into being Linux-only.
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Test
+        run: go test -race ./...
