@@ -30,8 +30,22 @@ func TestAppendScaling(t *testing.T) {
 	}
 
 	const base = 500
-	d1 := appendN(t, base)
-	d2 := appendN(t, base*2)
+	// Warm up once (cold file system and allocator state inflate the first run
+	// on a loaded CI runner), then take the fastest of three runs per size. Noise
+	// only ever adds time, so the minimum is the stable measurement. A quadratic
+	// Append still shows ~4x here, so the threshold below is unchanged.
+	appendN(t, base)
+	best := func(n int) time.Duration {
+		m := appendN(t, n)
+		for i := 1; i < 3; i++ {
+			if d := appendN(t, n); d < m {
+				m = d
+			}
+		}
+		return m
+	}
+	d1 := best(base)
+	d2 := best(base * 2)
 
 	ratio := float64(d2) / float64(d1)
 	t.Logf("append %d records: %v", base, d1)
